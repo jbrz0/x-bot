@@ -78,40 +78,91 @@ Designed for local execution and Vercel Serverless Function deployment.
     npm run test:coverage # Run tests and generate coverage report
     ```
 
-## Deployment (Vercel)
+## Deployment (DigitalOcean Droplet with Docker)
 
-1.  **Create a Vercel project:** Link your Git repository (GitHub, GitLab, Bitbucket).
-2.  **Configure Build Command:** Set the build command to `npm run build` or `npx prisma generate && npm run build` if generation is needed during build.
-3.  **Configure Output Directory:** Vercel usually detects Next.js/Nuxt, ensure it knows this is a Node.js backend if needed. The `dist` directory isn't directly served, but the `api` directory is key.
-4.  **Set Environment Variables:** In the Vercel project settings (Settings > Environment Variables), add all the variables defined in `.env.example` (e.g., `X_APP_KEY`, `OPENAI_API_KEY`, `DATABASE_URL`, `VERCEL_CRON_SECRET`).
-    *   **`DATABASE_URL`:** Change this to your production database connection string (e.g., Supabase/Postgres).
-    *   **`VERCEL_CRON_SECRET` (Optional but Recommended):** Generate a strong secret string. Add it here and also in `vercel.json` under the cron job definition (`"path": "/api/run-bot?_cron_secret=YOUR_SECRET"`) for protection. *Note: The current `api/run-bot.ts` checks the `Authorization: Bearer <secret>` header, which is Vercel's default protection method when using the dashboard UI to add protection. If adding manually to `vercel.json`, the query param method might be needed instead, requiring an update to `api/run-bot.ts`.* Refer to Vercel Cron Job security documentation.
-5.  **Deploy:** Trigger a deployment.
-6.  **Set up Production Database:** 
-    *   If using a relational database like Postgres on Supabase, update your `prisma/schema.prisma` file:
-        ```prisma
-        datasource db {
-          provider = "postgresql"
-          url      = env("DATABASE_URL")
-        }
+This setup uses Docker and Docker Compose to run the bot application containerized on a DigitalOcean droplet (or any server with Docker).
+
+**Prerequisites:**
+
+*   A DigitalOcean account and a Droplet created (Ubuntu recommended, with Docker pre-installed or installed manually).
+*   Docker and Docker Compose installed on your local machine (for building/testing) and on the Droplet.
+*   Git installed on the Droplet.
+*   Your Supabase database ready (or alternative Postgres database).
+
+**Steps:**
+
+1.  **SSH into your Droplet:**
+    ```bash
+    ssh root@your_droplet_ip
+    ```
+2.  **Clone the repository:**
+    ```bash
+    git clone <your-repository-url> # Replace with your repo URL
+    cd x-bot
+    ```
+3.  **Create the environment file:**
+    *   Copy the example:
+        ```bash
+        cp .env.example .env
         ```
-    *   Run `npx prisma db push` (or preferably `npx prisma migrate deploy` after creating migrations locally) against your production database *before* or during the first deployment.
-7.  **Monitor:** Check Vercel Functions logs and Cron Job status in the dashboard.
+    *   **Edit `.env` using a terminal editor** (like `nano` or `vim`) and fill in **all** your production credentials:
+        ```bash
+        nano .env
+        ```
+        *   Make sure `DATABASE_URL` points to your production Supabase Postgres string.
+        *   Set `NODE_ENV=production`.
+        *   Set `SIMULATE_MODE=false`.
+        *   Leave `SIMULATE_DATABASE_URL` as is or remove it; it won't be used in production.
+        *   Fill in `X_...` and `OPENAI_API_KEY`.
+    *   Save the file (e.g., `Ctrl+X`, then `Y`, then `Enter` in `nano`).
+4.  **Apply Database Migrations (Important!):**
+    *   Before starting the bot for the first time, apply the Prisma schema to your production database:
+        ```bash
+        # Ensure node/npm are installed on the droplet if not using Docker for this step
+        # npm install -g prisma # Install prisma globally if needed
+        npx prisma migrate deploy
+        ```
+    *   *(Alternative for first time)*: If you haven't created migrations yet, you might need to run `npx prisma db push --accept-data-loss` *once* to initialize the schema. Use `migrate deploy` for subsequent updates.
+5.  **Build and Run with Docker Compose:**
+    ```bash
+    docker-compose up --build -d
+    ```
+    *   `--build`: Forces Docker to rebuild the image using the `Dockerfile`.
+    *   `-d`: Runs the container in detached mode (in the background).
+6.  **Check Logs:**
+    *   View the bot's logs:
+        ```bash
+        docker-compose logs -f x-bot
+        ```
+    *   Press `Ctrl+C` to stop following the logs.
+7.  **Stopping the Bot:**
+    ```bash
+    docker-compose down
+    ```
+
+**Updating:**
+
+1.  SSH into the droplet.
+2.  Navigate to the `x-bot` directory.
+3.  Pull the latest code: `git pull origin main` (or your branch).
+4.  Apply any new database migrations: `npx prisma migrate deploy`.
+5.  Rebuild and restart the container: `docker-compose up --build -d`.
 
 ## Environment Variables
 
 | Variable               | Description                                                                 | Example                         |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------------------- |
+| `NODE_ENV`             | Set to `production` for deployments                                         | `production`                    |
 | `X_APP_KEY`            | X API Key (Consumer Key)                                                    | `your_app_key`                  |
 | `X_APP_SECRET`         | X API Key Secret (Consumer Secret)                                          | `your_app_secret`               |
 | `X_ACCESS_TOKEN`       | X Access Token (for the bot user @jbrz0_bot)                                | `your_access_token`             |
 | `X_ACCESS_SECRET`      | X Access Token Secret (for the bot user @jbrz0_bot)                         | `your_access_secret`            |
 | `OPENAI_API_KEY`       | Your OpenAI API key                                                         | `sk-xxxxxxxxxxxxxxxxxxxxxxxxx`    |
 | `OPENAI_MODEL`         | OpenAI model to use (optional, defaults to `gpt-4o-mini`)                   | `gpt-4o`                        |
-| `DATABASE_URL`         | Connection string for the database (SQLite for local, Postgres for prod)    | `file:./dev.db`                 |
-| `LOG_LEVEL`            | Logging level for Pino (optional, defaults to `info`)                       | `debug`                         |
-| `SIMULATE_MODE`        | Set to `true` to prevent actual X API posts (optional, defaults to `false`) | `true`                          |
-| `VERCEL_CRON_SECRET`   | Secret for securing Vercel cron job endpoint (optional, for Vercel deploy)  | `a_very_strong_random_secret` |
+| `DATABASE_URL`         | Connection string for the database (Supabase/Postgres for prod)             | `postgresql://user:pw...`       |
+| `SIMULATE_DATABASE_URL`| Database URL for local simulate mode (SQLite)                             | `file:./dev.db`                 |
+| `LOG_LEVEL`            | Logging level for Pino (optional, defaults to `info`)                       | `info`                          |
+| `SIMULATE_MODE`        | Set to `false` for production                                               | `false`                         |
 
 ## Project Structure
 
@@ -125,8 +176,6 @@ prisma/
   schema.prisma     # Database schema
   dev.db            # SQLite database (local, generated)
 src/
-  api/
-    run-bot.ts      # Vercel Serverless Function handler
   lib/
     prisma.ts       # Prisma client singleton
   services/
@@ -149,6 +198,10 @@ tsconfig.json       # TypeScript configuration
 vercel.json         # Vercel deployment configuration (cron)
 vitest.config.ts    # Vitest configuration
 README.md           # This file
+.dockerignore       # Docker ignore rules
+Dockerfile          # Docker build definition
+docker-compose.yml  # Docker compose configuration
+ecosystem.config.js # PM2 configuration
 ```
 
 ## TODO / Future Ideas
