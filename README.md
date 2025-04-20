@@ -135,7 +135,10 @@ This setup uses Docker and Docker Compose to run the bot application containeriz
 6.  **Check Logs:**
     *   View the bot's logs:
         ```bash
-        docker-compose logs -f x-bot
+        docker-compose logs -f x-bot-app
+        
+        # or if v2 like digital ocean (no hyphens)
+        docker logs x-bot-app -f
         ```
     *   Press `Ctrl+C` to stop following the logs.
 7.  **Stopping the Bot:**
