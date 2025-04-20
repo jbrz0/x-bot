@@ -8,7 +8,7 @@ logger.info('Local scheduler started.');
 // --- Configuration ---
 // TODO: Make this schedule configurable (e.g., via config.ts or env var)
 // Example: Run every hour at the 5-minute mark
-const CRON_SCHEDULE = '5 * * * *';
+const CRON_SCHEDULE = '5 */8 * * *';
 
 // Determine if running in simulate mode
 const isSimulate = process.env.SIMULATE_MODE === 'true';
