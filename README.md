@@ -126,6 +126,9 @@ This setup uses Docker and Docker Compose to run the bot application containeriz
 5.  **Build and Run with Docker Compose:**
     ```bash
     docker-compose up --build -d
+
+    # or if v2 like digital ocean (no hyphens)
+    docker compose up --build -d
     ```
     *   `--build`: Forces Docker to rebuild the image using the `Dockerfile`.
     *   `-d`: Runs the container in detached mode (in the background).

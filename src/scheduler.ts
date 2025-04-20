@@ -15,8 +15,8 @@ const isSimulate = process.env.SIMULATE_MODE === 'true';
 const simulateArg = isSimulate ? ' --simulate' : '';
 
 // Path to the bot script
-const botScriptPath = path.resolve(__dirname, 'bot.ts');
-const command = `ts-node ${botScriptPath}${simulateArg}`;
+const botScriptPath = path.resolve(__dirname, 'bot.js');
+const command = `node ${botScriptPath}${simulateArg}`;
 
 /**
  * Executes the bot script using ts-node.
