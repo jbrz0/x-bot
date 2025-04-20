@@ -23,8 +23,8 @@ export const config = {
     productivity: ['#productivity', '#automation', '#indiehacker', '#buildinpublic', 'SaaS', 'business process'],
     design: ['#UIUX', '#productdesign', '#designsystem', '#AIart', 'Figma', '#webdesign', 'graphic design'],
     scifi: ['#scifi', '#cyberpunk', '#solarpunk', 'future tech', 'space exploration'],
-    webdev: ['#webdev', '#coding', '#typescript', '#javascript', 'React', 'Node.js', '#vibe'],
-    apple: ['#Apple', '#iOS', '#macOS', 'Apple Vision Pro', 'SwiftUI'],
+    webdev: ['#webdev', '#coding', '#typescript', '#javascript', 'React', 'Node.js', 'vibe coding'],
+    apple: ['#Apple', '#iOS', '#macOS', '#iPadOS', 'Apple Vision Pro', 'SwiftUI'],
     minimalism: ['#minimalism', 'simple living', 'declutter', 'essentialism'],
     lifeImprovement: ['#habits', '#selfimprovement', '#healthtech', 'biohacking', 'mental wellness'],
     crypto: ['#crypto', '#web3', '#DeFi', 'blockchain', 'NFTs', 'Ethereum'],
@@ -39,9 +39,9 @@ export const config = {
   // Posting cadence configuration (approximate times/counts)
   // TODO: Implement more robust cadence logic in chooseAction.ts
   cadence: {
-    morning: { startHour: 9, endHour: 12, reposts: 2, original: 1 },
-    afternoon: { startHour: 13, endHour: 17, replies: 2 },
-    evening: { startHour: 19, endHour: 20, reposts: 1, original: 1 },
+    morning: { startHour: 6, endHour: 12, reposts: 2, original: 3 },
+    afternoon: { startHour: 13, endHour: 17, replies: 2, original: 1 },
+    evening: { startHour: 19, endHour: 23, replies: 1, reposts: 2, original: 2 },
     // Add checks to ensure these don't exceed rate limits over 3 hours
   },
 
