@@ -1,0 +1,24 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Model to track bot interactions
+model InteractionLog {
+  id        String   @id @default(cuid())
+  type      String // e.g., "reply", "repost", "original_post"
+  targetId  String? // e.g., Tweet ID for replies/reposts
+  authorId  String? // Author ID for replies
+  createdAt DateTime @default(now())
+
+  @@index([authorId, createdAt]) // Index for querying recent interactions by author
+  @@index([type, createdAt]) // Index for querying recent interactions by type
+}

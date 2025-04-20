@@ -1,0 +1,22 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Production-Quality Rule: No Mock Data or Temporary Solutions
+
+This rule mandates that all generated code must be fully production-ready. No mock data, placeholder values, or temporary quick-fix solutions are allowed. If a complete and robust solution isn’t achievable, the system must instead produce an error so that the issue can be addressed properly.
+
+No Mock Data:
+- Do not generate or include any mock data or dummy values in any code or example.
+- All data should reflect real-world, applicable scenarios.
+
+No Temporary Solutions:
+- Avoid any hacky, provisional, or quick-fix implementations solely to get a server or app running.
+- Every solution must be robust and final, adhering to production standards.
+
+Error on Incompletion:
+- If a complete, production-level solution cannot be provided, the AI must return an error rather than resorting to any temporary or mock implementations.
+
+Enforcement:
+- This rule applies universally across all file types and contexts. Any deviation should immediately result in an error, prompting a fix that aligns with these strict guidelines.

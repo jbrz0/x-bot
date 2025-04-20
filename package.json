@@ -1,0 +1,40 @@
+{
+  "name": "x-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/scheduler.js",
+    "dev": "nodemon --watch src --ext ts --exec 'ts-node src/scheduler.ts'",
+    "simulate": "ts-node src/bot.ts --simulate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/node-cron": "^3.0.11",
+    "@vercel/node": "^5.1.14",
+    "@vitest/coverage-v8": "^3.1.1",
+    "dotenv": "^16.5.0",
+    "node-cron": "^3.0.3",
+    "nodemon": "^3.1.9",
+    "openai": "^4.95.1",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "ts-node": "^10.9.2",
+    "twitter-api-v2": "^1.22.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "@types/p-retry": "^3.0.0",
+    "p-retry": "^6.2.1",
+    "prisma": "^6.6.0"
+  }
+}
