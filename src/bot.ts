@@ -38,7 +38,7 @@ async function logInteraction(type: string, targetId?: string, authorId?: string
 /**
  * Main function to run the bot's logic cycle.
  */
-async function runBotCycle() {
+export async function runBotCycle() {
   logger.info('Starting bot cycle...');
 
   try {
@@ -126,7 +126,10 @@ async function runBotCycle() {
 }
 
 // --- Entry Point --- 
-
+// This logic is removed as the scheduler (scheduler.ts) now calls runBotCycle().
+// Simulate mode is handled via config.simulateMode checked within functions.
+// Prisma connection management can be handled at the application level if needed.
+/*
 // Check for simulate mode flag (simple check for now)
 const isSimulate = process.argv.includes('--simulate') || process.env.SIMULATE_MODE === 'true';
 
@@ -146,4 +149,5 @@ runBotCycle()
     logger.fatal({ error }, 'Unhandled error during bot execution.');
     await prisma.$disconnect(); // Disconnect Prisma client
     process.exit(1);
-  }); 
+  });
+*/ 

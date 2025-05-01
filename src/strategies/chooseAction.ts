@@ -2,6 +2,7 @@ import logger from '../utils/logger';
 import { config } from '../config'; // Import shared configuration
 import prisma from '../lib/prisma'; // Import the Prisma client instance
 import { searchRecentTweets } from '../services/xClient'; // Import the actual search function
+import { Prisma } from '@prisma/client'; // Import Prisma for types
 // TODO: Import necessary types from twitter-api-v2 when implementing tweet fetching
 // import { TTweetv2Tweet } from 'twitter-api-v2';
 
@@ -9,6 +10,10 @@ import { searchRecentTweets } from '../services/xClient'; // Import the actual s
 const { topicWeights, engagement } = config;
 const ENGAGEMENT_THRESHOLD = engagement.replyThreshold;
 const HOURS_SINCE_LAST_REPLY_AUTHOR = engagement.hoursSinceLastReplyAuthor;
+
+// --- Twitter API Rate Limits (Basic Tier) ---
+const TWITTER_POST_REPLY_LIMIT_24H = 100; // POST /2/tweets (User Limit)
+const TWITTER_REPOST_LIMIT_15M = 5;     // POST /2/users/:id/retweets (User Limit)
 
 // --- Types --- (Define interfaces for clarity)
 
@@ -71,25 +76,74 @@ function getCurrentCadenceWindow(currentHour: number): typeof config.cadence.mor
  * @param sinceDate The start date/time to count from.
  * @returns A promise resolving to the count of interactions.
  */
-async function countRecentInteractions(type: string, sinceDate: Date): Promise<number> {
+async function countRecentInteractions(type: string | string[], sinceDate: Date): Promise<number> {
   if (config.simulateMode) {
-    logger.warn(`[SIMULATE] DB count skipped for type ${type} since ${sinceDate.toISOString()}. Returning 0.`);
+    const types = Array.isArray(type) ? type.join(', ') : type;
+    logger.warn(`[SIMULATE] DB count skipped for type(s) ${types} since ${sinceDate.toISOString()}. Returning 0.`);
     return 0; // Assume no interactions in simulate mode
   }
   try {
-    const count = await prisma.interactionLog.count({
+    const whereClause: Prisma.InteractionLogWhereInput = {
+      createdAt: {
+        gte: sinceDate,
+      },
+    };
+
+    if (Array.isArray(type)) {
+      whereClause.type = { in: type };
+    } else {
+      whereClause.type = type;
+    }
+
+    const count = await prisma.interactionLog.count({ where: whereClause });
+
+    const types = Array.isArray(type) ? type.join(', ') : type;
+    logger.debug({ types, since: sinceDate.toISOString(), count }, 'Checked recent interaction count');
+    return count;
+  } catch (error) {
+    const types = Array.isArray(type) ? type.join(', ') : type;
+    logger.error({ error, types, sinceDate }, 'Error counting recent interactions');
+    return Infinity; // Return Infinity on error to prevent actions if DB fails
+  }
+}
+
+/**
+ * Checks if the bot has reposted a specific tweet recently.
+ * @param targetTweetId The ID of the tweet to check for reposts.
+ * @returns A promise resolving to true if a recent repost exists, false otherwise.
+ */
+async function hasRepostedTweetRecently(targetTweetId: string): Promise<boolean> {
+  // Define how far back to check (e.g., 7 days to be safe)
+  const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  logger.debug(`Checking for recent repost of tweet ${targetTweetId} since ${cutoffDate.toISOString()}`);
+
+  if (config.simulateMode) {
+    logger.warn(`[SIMULATE] DB check skipped for hasRepostedTweetRecently.`);
+    return false; // Assume no recent repost in simulate mode
+  }
+
+  try {
+    const recentRepost = await prisma.interactionLog.findFirst({
       where: {
-        type: type,
+        targetId: targetTweetId,
+        type: 'repost',
         createdAt: {
-          gte: sinceDate,
+          gte: cutoffDate,
         },
       },
     });
-    logger.debug({ type, since: sinceDate.toISOString(), count }, 'Checked recent interaction count');
-    return count;
+
+    if (recentRepost) {
+      logger.info(`Found recent repost of tweet ${targetTweetId} (Log ID: ${recentRepost.id}). Skipping repost.`);
+      return true;
+    } else {
+      logger.debug(`No recent repost found for tweet ${targetTweetId}.`);
+      return false;
+    }
   } catch (error) {
-    logger.error({ error, type, sinceDate }, 'Error counting recent interactions');
-    return Infinity; // Return Infinity on error to prevent actions if DB fails
+    logger.error({ error, targetTweetId }, 'Error checking for recent reposts in database');
+    // Default to true (don't repost) if there's a DB error to be safe
+    return true;
   }
 }
 
@@ -166,10 +220,32 @@ async function hasRepliedToAuthorRecently(authorId: string): Promise<boolean> {
  */
 export async function chooseNextAction(): Promise<ActionDecision> {
   logger.info('Choosing next action...');
+
+  // --- Pre-Action Rate Limit Checks ---
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+
+  // Check combined Post/Reply limit (24 hours)
+  const recentPostsAndRepliesCount24h = await countRecentInteractions(['original_post', 'reply'], twentyFourHoursAgo);
+  if (recentPostsAndRepliesCount24h >= TWITTER_POST_REPLY_LIMIT_24H) {
+    logger.warn(`Approaching or exceeded 24-hour Post/Reply limit (${recentPostsAndRepliesCount24h}/${TWITTER_POST_REPLY_LIMIT_24H}). Holding off actions.`);
+    return { type: 'ignore', reason: `24-hour Post/Reply limit reached (${recentPostsAndRepliesCount24h}/${TWITTER_POST_REPLY_LIMIT_24H})` };
+  }
+  logger.debug(`24h Post/Reply Count: ${recentPostsAndRepliesCount24h}/${TWITTER_POST_REPLY_LIMIT_24H}`);
+
+  // Check Repost limit (15 minutes) - Note: This check is also implicitly done later, but checking early avoids unnecessary work
+  const recentRepostsCount15m = await countRecentInteractions('repost', fifteenMinutesAgo);
+  if (recentRepostsCount15m >= TWITTER_REPOST_LIMIT_15M) {
+     logger.warn(`Approaching or exceeded 15-minute Repost limit (${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}). Cannot repost currently.`);
+     // We don't ignore *all* actions here, just reposting. The check below will handle this.
+  }
+   logger.debug(`15m Repost Count: ${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}`);
+  // --- End Pre-Action Rate Limit Checks ---
+
   const candidates = await fetchTweetCandidates();
   candidates.sort((a, b) => calculateEngagementScore(b) - calculateEngagementScore(a));
 
-  const now = new Date();
   const currentHour = now.getHours();
   const currentWindow = getCurrentCadenceWindow(currentHour);
 
@@ -213,25 +289,33 @@ export async function chooseNextAction(): Promise<ActionDecision> {
       logger.info(`Skipping reply check due to cadence limits (allowed: ${allowedReplies}, recent: ${recentReplyCount}) or being outside a reply window.`);
   }
 
-  // 2. Look for a relevant tweet to repost (if cadence allows)
+  // 2. Look for a relevant tweet to repost (if cadence allows AND 15m limit not hit)
   const allowedReposts = currentWindow && 'reposts' in currentWindow ? currentWindow.reposts : 0;
-  const recentRepostCount = await countRecentInteractions('repost', cadenceCheckStartDate);
-  logger.debug({ allowed: allowedReposts, recent: recentRepostCount }, 'Repost cadence check');
+  const recentRepostCountCadence = await countRecentInteractions('repost', cadenceCheckStartDate); // Renamed for clarity
+  // Use the pre-checked 15m count for rate limit
+  logger.debug({ allowedCadence: allowedReposts, recentCadence: recentRepostCountCadence, recent15m: recentRepostsCount15m }, 'Repost cadence and rate limit check');
 
-  if (allowedReposts > 0 && recentRepostCount < allowedReposts) {
+  if (allowedReposts > 0 && recentRepostCountCadence < allowedReposts && recentRepostsCount15m < TWITTER_REPOST_LIMIT_15M) {
     const relevantCandidates = candidates.filter(t => isTweetRelevant(t.text));
     if (relevantCandidates.length > 0) {
-      const bestRepostCandidate = relevantCandidates[0]; 
-       // TODO: Add check to ensure bot hasn't reposted this specific tweet recently
-      logger.info(`Found potential repost target: Tweet ${bestRepostCandidate.id} (Score: ${calculateEngagementScore(bestRepostCandidate).toFixed(2)})`);
-      return {
-        type: 'repost',
-        reason: `Found relevant candidate within cadence (${recentRepostCount}/${allowedReposts}).`,
-        targetTweet: bestRepostCandidate,
-      };
+      // Find the best candidate that hasn't been reposted recently
+      for (const bestRepostCandidate of relevantCandidates) {
+        const alreadyReposted = await hasRepostedTweetRecently(bestRepostCandidate.id);
+        if (!alreadyReposted) {
+           logger.info(`Found potential repost target: Tweet ${bestRepostCandidate.id} (Score: ${calculateEngagementScore(bestRepostCandidate).toFixed(2)})`);
+            return {
+                type: 'repost',
+                reason: `Found relevant candidate within cadence (${recentRepostCountCadence}/${allowedReposts}) and 15m rate limit (${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}). Not a duplicate repost.`,
+                targetTweet: bestRepostCandidate,
+            };
+        } else {
+            logger.debug(`Skipping repost of ${bestRepostCandidate.id} as it was reposted recently.`);
+        }
+      }
+       logger.info('All relevant candidates have been reposted recently.');
     }
   } else {
-       logger.info(`Skipping repost check due to cadence limits (allowed: ${allowedReposts}, recent: ${recentRepostCount}) or being outside a repost window.`);
+       logger.info(`Skipping repost check due to cadence limits (allowed: ${allowedReposts}, recent: ${recentRepostCountCadence}), 15m rate limit (recent: ${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}), or being outside a repost window.`);
   }
 
   // 3. Decide to make an original post (if cadence allows)

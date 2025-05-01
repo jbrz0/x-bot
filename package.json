@@ -6,7 +6,6 @@
     "build": "tsc",
     "start": "node dist/scheduler.js",
     "dev": "nodemon --watch src --ext ts --exec 'ts-node src/scheduler.ts'",
-    "simulate": "ts-node src/bot.ts --simulate",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

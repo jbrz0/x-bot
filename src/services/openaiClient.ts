@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import logger from '../utils/logger';
+import { config } from '../config';
 
 dotenv.config();
 
@@ -27,40 +28,8 @@ const selectedModel = OPENAI_MODEL || defaultModel;
 logger.info(`OpenAI client initialized. Using model: ${selectedModel}`);
 
 // --- Personality & Tone Prompt --- 
-const systemPrompt = `
-You are an AI assistant embodying the persona of a friendly, casual-smart designer-founder (@jbrz0_bot on X). 
-Your goal is to share interesting content, add value to conversations, and occasionally post original thoughts related to the user's interests.
-
-**Personality Traits:**
-*   **Builder Mindset:** Share drafts, experiments, behind-the-scenes insights.
-*   **Design-First:** Value aesthetics, accessibility, UX. Love dark mode, neon/cyber visuals.
-*   **Tech-Optimistic but Pragmatic:** Excited about AI, crypto, emerging tech, but call out hype.
-*   **Minimal-Zen Streak:** Appreciate simplicity, signal over noise.
-*   **Curious Teacher:** Distill complex ideas into crisp takeaways.
-*   **High-Energy Encourager:** Cheer on indie hackers, give constructive feedback, nudge people to ship.
-
-**Tone:** Casual, conversational English. Use well-timed emojis sparingly. Avoid corporate jargon or overly formal language. Sound like a helpful friend who's a senior product designer and indie hacker.
-
-**Content Safeguards (Strictly Enforced):**
-*   **No Hate Speech or Harassment:** Absolutely do not generate content that promotes violence, discrimination, or harassment against any individual or group.
-*   **Avoid Excessive Negativity:** Maintain a generally positive and constructive tone. Avoid overly harsh criticism or rants, unless specifically instructed for a "hot take" context (which should be rare).
-*   **No NSFW Content:** Do not generate sexually explicit or suggestive content.
-*   **Filter Politics:** Avoid partisan political commentary or taking sides in political debates, unless the input context is explicitly about policy relevant to tech/design/business in a neutral way.
-*   **Fact-Checking:** While you aim for helpfulness, avoid stating uncertain information as fact. Qualify statements where necessary (e.g., "It seems like...", "One perspective is...").
-*   **Be Respectful:** Always interact respectfully, even when disagreeing.
-
-**Focus Topics (Weighted):**
-*   Productivity/automation/business/indie-building (8/10)
-*   Product/UI/UX/AI art/design (7/10)
-*   Web dev/coding (5/10)
-*   Apple tech (4/10)
-*   Crypto/DeFi (4/10)
-*   Sci-fi futures (3/10)
-*   Minimalism (3/10)
-*   Life-improvement (3/10)
-
-**Output Format:** Generate only the text content for the tweet or reply. Be concise (ideally under 280 characters).
-`;
+// Removed: Now defined and imported from config.ts
+// const systemPrompt = `...`; 
 
 // --- Basic Harmful Content Check (Post-Generation) ---
 // This is a very rudimentary check. Consider more sophisticated methods if needed.
@@ -80,12 +49,22 @@ function containsHarmfulContent(text: string): boolean {
  * @returns The generated text content.
  */
 export async function generateContent(userPrompt: string): Promise<string | null> {
-  logger.debug({ userPrompt }, `Generating content for prompt`);
-  try {
+  const actionName = 'generate content';
+  logger.debug({ userPrompt }, `Attempting to ${actionName}`);
+
+  if (config.simulateMode) {
+    logger.warn(`[SIMULATE] ${actionName} skipped. Returning placeholder.`);
+    return "[Simulated OpenAI Content]"; // Return placeholder for simulation
+  }
+
+  // Dynamically import p-retry
+  const pRetry = (await import('p-retry')).default;
+
+  const run = async () => {
     const completion = await openai.chat.completions.create({
       model: selectedModel,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: config.systemPrompt }, // Use prompt from config
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7, // Adjust for desired creativity/predictability
@@ -94,24 +73,62 @@ export async function generateContent(userPrompt: string): Promise<string | null
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI response did not contain content.');
+      // Throw an error to trigger retry if content is missing
+      throw new Error('OpenAI response did not contain content.'); 
     }
+    return content.trim(); // Return trimmed content on success
+  };
 
-    const trimmedContent = content.trim();
+  try {
+    const generatedContent = await pRetry(run, {
+        retries: 2, // Retry 2 times on failure (total 3 attempts)
+        factor: 2,
+        minTimeout: 1000 * 2, // Start with 2 seconds
+        onFailedAttempt: (error: any) => {
+            logger.warn(
+              { 
+                actionName,
+                attempt: error.attemptNumber, 
+                retriesLeft: error.retriesLeft, 
+                errorMsg: error.message, 
+                errorCode: error?.response?.status // OpenAI errors often have status in response
+              },
+              `OpenAI request attempt #${error.attemptNumber} failed for ${actionName}. Retries left: ${error.retriesLeft}.`
+            );
+        },
+        shouldRetry: (error: any) => {
+            // Check for common transient OpenAI error codes (e.g., 429, 5xx) 
+            // Accessing error properties safely
+            const statusCode = error?.response?.status;
+            if (typeof statusCode === 'number') {
+                return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+            }
+            // Also retry on generic network errors if status code isn't available
+            return error?.code === 'ENOTFOUND' || error?.code === 'ETIMEDOUT'; 
+        },
+    });
 
     // Post-generation safeguard check
-    if (containsHarmfulContent(trimmedContent)) {
-      logger.error({ generatedContent: trimmedContent }, 'Generated content failed harmful content check.');
+    if (containsHarmfulContent(generatedContent)) {
+      logger.error({ generatedContent }, 'Generated content failed harmful content check.');
       return null; // Do not return harmful content
     }
 
-    logger.debug({ response: trimmedContent }, 'Content generated successfully');
-    return trimmedContent;
+    logger.debug({ response: generatedContent }, 'Content generated successfully');
+    return generatedContent;
 
-  } catch (error) {
-    logger.error({ error, userPrompt }, 'Failed to generate content with OpenAI');
-    // TODO: Implement retry logic if appropriate for OpenAI calls
-    return null; // Return null on generation error
+  } catch (error: any) {
+    logger.error(
+      {
+        errorMsg: error?.message,
+        errorCode: error?.response?.status,
+        errorData: error?.response?.data,
+        actionName,
+        userPrompt
+      },
+      `OpenAI request failed permanently for ${actionName} after retries.`
+    );
+    return null; // Return null on final generation error
   }
 }
 

@@ -1,63 +1,50 @@
-import cron from 'node-cron';
-import { exec } from 'child_process';
-import path from 'path';
-import logger from './utils/logger';
+import dotenv from 'dotenv';
+// Load environment variables early
+dotenv.config();
 
-logger.info('Local scheduler started.');
+import cron from 'node-cron';
+import logger from './utils/logger';
+import { config } from './config'; // Import config for SIMULATE_MODE
+import { runBotCycle } from './bot'; // Import the main bot logic function
+
+logger.info('Scheduler started.');
 
 // --- Configuration ---
-// TODO: Make this schedule configurable (e.g., via config.ts or env var)
-// Example: Run every hour at the 5-minute mark
-const CRON_SCHEDULE = '5 */8 * * *';
-
-// Determine if running in simulate mode
-const isSimulate = process.env.SIMULATE_MODE === 'true';
-const simulateArg = isSimulate ? ' --simulate' : '';
-
-// Path to the bot script
-const botScriptPath = path.resolve(__dirname, 'bot.js');
-const command = `node ${botScriptPath}${simulateArg}`;
+// Read schedule from environment variable or use default
+const cronSchedule = process.env.CRON_SCHEDULE || '5 */8 * * *';
 
 /**
- * Executes the bot script using ts-node.
+ * Runs the main bot cycle and handles errors.
  */
-function runBotScript() {
-  logger.info(`Executing bot script: ${command}`);
-
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      logger.error({ error, stderr }, `Error executing bot script`);
-      return;
-    }
-    if (stderr) {
-      logger.warn({ stderr }, 'Bot script produced stderr output');
-    }
-    logger.info({ stdout }, `Bot script finished successfully`);
-  });
+async function scheduledTaskWrapper() {
+  logger.info(`Cron job triggered (${cronSchedule}). Running bot cycle...`);
+  try {
+    // Directly call the imported bot logic
+    await runBotCycle();
+    logger.info('Bot cycle finished successfully.');
+  } catch (error) {
+    // Log any errors that occur within the bot cycle
+    logger.error({ error }, 'Error during scheduled bot cycle');
+  }
 }
 
 // Schedule the bot script execution
-cron.schedule(CRON_SCHEDULE, () => {
-  logger.info(`Cron job triggered (${CRON_SCHEDULE}). Running bot script...`);
-  runBotScript();
-});
+cron.schedule(cronSchedule, scheduledTaskWrapper);
 
-logger.info(`Bot script scheduled to run with schedule: ${CRON_SCHEDULE}`);
-if (isSimulate) {
-  logger.warn('Scheduler running in SIMULATE mode. Bot script will run with --simulate flag.');
+logger.info(`Bot cycle scheduled to run with schedule: ${cronSchedule}`);
+if (config.simulateMode) {
+  logger.warn('Scheduler running in SIMULATE mode. Bot actions will be logged, not executed.');
 }
 
-// Keep the scheduler running (useful for local dev)
-// In a real deployment, the process manager (like PM2 or Docker) would handle this.
-// For simple `npm run dev` with nodemon, this keeps the cron active.
+// Keep the scheduler running (useful for local dev / non-managed environments)
 logger.info('Scheduler process is running. Press Ctrl+C to exit.');
-// This prevents the script from exiting immediately.
-// Handle graceful shutdown if needed.
 process.stdin.resume();
 
 function handleExit(signal: string) {
   logger.info(`Received ${signal}. Shutting down scheduler...`);
-  // Perform any cleanup here if necessary
+  // Add potential cleanup tasks here
+  cron.getTasks().forEach(task => task.stop()); // Stop scheduled tasks
+  logger.info('Scheduled tasks stopped.');
   process.exit(0);
 }
 
