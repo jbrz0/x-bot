@@ -67,14 +67,14 @@ export const config = {
 
   // Keywords or search queries associated with topics (used for fetching candidates)
   topicKeywords: {
-    productivity: ['#productivity', '#automation', '#indiehacker', '#buildinpublic', 'SaaS', 'business process'],
-    design: ['#UIUX', '#productdesign', '#designsystem', '#AIart', 'Figma', '#webdesign', 'graphic design'],
-    scifi: ['#scifi', '#cyberpunk', '#solarpunk', 'future tech', 'space exploration'],
-    webdev: ['#webdev', '#coding', '#typescript', '#javascript', 'React', 'Node.js', 'vibe coding'],
-    apple: ['#Apple', '#iOS', '#macOS', '#iPadOS', 'Apple Vision Pro', 'SwiftUI'],
-    minimalism: ['#minimalism', 'simple living', 'declutter', 'essentialism'],
-    lifeImprovement: ['#habits', '#selfimprovement', '#healthtech', 'biohacking', 'mental wellness'],
-    crypto: ['#crypto', '#web3', '#DeFi', 'blockchain', 'NFTs', 'Ethereum'],
+    productivity: ['productivity', 'automation', 'indiehacker', 'buildinpublic', 'SaaS', 'business process'],
+    design: ['UI', 'UX', 'product design', 'AIart', 'Figma', 'web design'],
+    scifi: ['scifi', 'cyberpunk', 'solarpunk', 'future tech'],
+    webdev: ['webdev', 'coding', 'typescript', 'Node', 'vibe coding'],
+    apple: ['Apple', 'iOS', 'macOS', 'iPadOS', 'SwiftUI'],
+    minimalism: ['minimalism', 'simple living'],
+    lifeImprovement: ['habits', 'selfimprovement', 'healthtech', 'biohacking', 'wellness'],
+    crypto: ['crypto', 'web3', 'DeFi'],
   },
 
   // Engagement thresholds & rules
