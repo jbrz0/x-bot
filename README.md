@@ -11,6 +11,7 @@ Designed for local execution and Vercel Serverless Function deployment.
 ## Features (MVP)
 
 *   **Content Curation:** Scans recent tweets based on weighted topics (`productivity`, `design`, `webdev`, `apple`, `crypto`, `scifi`, `minimalism`, `life-improvement`).
+    *   **Note:** The combined length of all keywords in `src/config.ts` (joined by ` OR ` and including necessary filters like `-is:retweet`) must not exceed the X API v2 search query limit of 512 characters. If you add too many keywords, the tweet search functionality will fail.
 *   **Engagement Scoring:** Evaluates potential tweets using a heuristic based on author followers, likes, retweets, and age.
 *   **Action Strategy:** Decides whether to reply, repost, post original content, or ignore based on engagement, relevance, and basic cadence rules.
 *   **AI-Powered Content:** Uses OpenAI (`gpt-4o-mini` by default) to generate replies and original posts matching a defined persona (designer-founder, casual-smart, tech-optimistic).
