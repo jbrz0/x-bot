@@ -236,12 +236,15 @@ export async function searchRecentTweets(count: number = 10): Promise<TweetCandi
   }
 
   // --- Build Query ---
-  // Simple strategy: pick one random topic, join its keywords with OR
-  // Exclude retweets and replies for now to focus on original content
-  const topics = Object.keys(config.topicKeywords);
-  const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-  const keywords = config.topicKeywords[randomTopic as keyof typeof config.topicKeywords];
-  const query = `(${keywords.join(' OR ')}) -is:retweet -is:reply lang:en`;
+  // Combine keywords from ALL configured topics with OR
+  // Exclude retweets and replies to focus on original content
+  const allKeywords = Object.values(config.topicKeywords).flat();
+  // Ensure keywords are unique to avoid overly long queries if duplicates exist
+  const uniqueKeywords = [...new Set(allKeywords)]; 
+  // Add parentheses around each keyword/phrase for better OR grouping if they contain spaces
+  const formattedKeywords = uniqueKeywords.map(kw => kw.includes(' ') ? `"${kw}"` : kw); 
+  
+  const query = `(${formattedKeywords.join(' OR ')}) -is:retweet -is:reply lang:en`;
   logger.debug(`Using search query: ${query}`);
 
   // --- Make API Call ---
