@@ -243,29 +243,42 @@ export async function chooseNextAction(): Promise<ActionDecision> {
    logger.debug(`15m Repost Count: ${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}`);
   // --- End Pre-Action Rate Limit Checks ---
 
-  const candidates = await fetchTweetCandidates();
-  candidates.sort((a, b) => calculateEngagementScore(b) - calculateEngagementScore(a));
-
+  // --- Cadence Window and Allowed Actions Check (NEW) ---
   const currentHour = now.getHours();
   const currentWindow = getCurrentCadenceWindow(currentHour);
+
+  let allowedReplies = 0;
+  let allowedReposts = 0;
+  let allowedOriginals = 0;
+  if (currentWindow) {
+    allowedReplies = 'replies' in currentWindow ? currentWindow.replies : 0;
+    allowedReposts = 'reposts' in currentWindow ? currentWindow.reposts : 0;
+    allowedOriginals = 'original' in currentWindow ? currentWindow.original : 0;
+  }
+
+  if (!currentWindow || (allowedReplies === 0 && allowedReposts === 0 && allowedOriginals === 0)) {
+    logger.info('No actions allowed in the current cadence window. Skipping candidate search to save API credits.');
+    return {
+      type: 'ignore',
+      reason: 'No actions allowed in the current cadence window (all limits zero or outside window).',
+    };
+  }
+  // --- End Cadence Window and Allowed Actions Check (NEW) ---
 
   // Determine start time for cadence checks (e.g., start of the current window or last X hours)
   // Simple approach: check since the start of the current window
   let cadenceCheckStartDate = new Date(now);
-  if (currentWindow) {
-      cadenceCheckStartDate.setHours(currentWindow.startHour, 0, 0, 0);
-  } else {
-      // If outside defined windows, maybe check last 3 hours? Or don't act?
-      // For now, let's default to not acting outside windows by setting a future date.
-      cadenceCheckStartDate.setHours(currentHour + 1, 0, 0, 0); 
-  }
+  cadenceCheckStartDate.setHours(currentWindow.startHour, 0, 0, 0);
 
   logger.debug({ currentHour, window: currentWindow, checkSince: cadenceCheckStartDate.toISOString() }, 'Cadence check parameters');
+
+  // --- Fetch Candidates Only If Actions Are Possible ---
+  const candidates = await fetchTweetCandidates();
+  candidates.sort((a, b) => calculateEngagementScore(b) - calculateEngagementScore(a));
 
   // --- Action Logic ---
 
   // 1. Look for a high-engagement tweet to reply to (if cadence allows)
-  const allowedReplies = currentWindow && 'replies' in currentWindow ? currentWindow.replies : 0;
   const recentReplyCount = await countRecentInteractions('reply', cadenceCheckStartDate);
   logger.debug({ allowed: allowedReplies, recent: recentReplyCount }, 'Reply cadence check');
 
@@ -290,7 +303,6 @@ export async function chooseNextAction(): Promise<ActionDecision> {
   }
 
   // 2. Look for a relevant tweet to repost (if cadence allows AND 15m limit not hit)
-  const allowedReposts = currentWindow && 'reposts' in currentWindow ? currentWindow.reposts : 0;
   const recentRepostCountCadence = await countRecentInteractions('repost', cadenceCheckStartDate); // Renamed for clarity
   // Use the pre-checked 15m count for rate limit
   logger.debug({ allowedCadence: allowedReposts, recentCadence: recentRepostCountCadence, recent15m: recentRepostsCount15m }, 'Repost cadence and rate limit check');
@@ -319,7 +331,6 @@ export async function chooseNextAction(): Promise<ActionDecision> {
   }
 
   // 3. Decide to make an original post (if cadence allows)
-  const allowedOriginals = currentWindow && 'original' in currentWindow ? currentWindow.original : 0;
   const recentOriginalCount = await countRecentInteractions('original_post', cadenceCheckStartDate);
    logger.debug({ allowed: allowedOriginals, recent: recentOriginalCount }, 'Original post cadence check');
 
