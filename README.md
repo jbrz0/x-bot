@@ -263,3 +263,11 @@ pm2 restart x-bot    # Restart bot
 pm2 stop x-bot       # Stop bot
 pm2 delete x-bot     # Delete bot
 ```
+
+# Latest updated commands
+
+Added npm scripts:
+npm run pm2 - Start the bot
+npm run pm2:stop - Stop the bot
+npm run pm2:restart - Restart the bot
+npm run pm2:logs - View logs

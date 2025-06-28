@@ -7,6 +7,10 @@
     "start": "node dist/scheduler.js",
     "dev": "nodemon --watch src --ext ts --exec 'ts-node src/scheduler.ts'",
     "run-now": "ts-node src/bot.ts",
+    "pm2": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop x-bot",
+    "pm2:restart": "pm2 restart x-bot",
+    "pm2:logs": "pm2 logs x-bot",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

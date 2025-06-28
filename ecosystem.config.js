@@ -2,13 +2,15 @@ module.exports = {
   apps : [{
     name   : "x-bot",
     script : "src/scheduler.ts",
-    interpreter: "ts-node",
+    interpreter: "./node_modules/.bin/ts-node",
     instances: 1,
     autorestart: true,
     watch: false,
     max_memory_restart: '256M',
     env: {
       NODE_ENV: "production",
+      TS_NODE_TRANSPILE_ONLY: "true",
+      TS_NODE_FILES: "true"
     },
     log_date_format: "YYYY-MM-DD HH:mm:ss Z",
     out_file: "./logs/out.log",
