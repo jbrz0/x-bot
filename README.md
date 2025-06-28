@@ -230,6 +230,7 @@ Use pm2 (Recommended for production)
 
 ```bash 
 npm install -g pm2
+npm install -g ts-node typescript
 ```
 
 
