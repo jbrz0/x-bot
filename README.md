@@ -223,28 +223,43 @@ ecosystem.config.js # PM2 configuration
 *   (See full list in `checklist.md` Phase 2 & Advanced Features) 
 
 
-# PM2
+# PM2 Deployment
 Use pm2 (Recommended for production)
 
-### Install pm2 (if not done yet):
+### Install dependencies:
 
 ```bash 
-npm install -g pm2
-npm install -g ts-node typescript
+npm install -g pm2 ts-node typescript
+npm install  # Install project dependencies
 ```
 
-
-### Start your app with pm2:
+### Stop any existing PM2 processes:
 
 ```bash
-pm2 start src/scheduler.ts --interpreter ts-node --name x-bot
+pm2 stop all
+pm2 delete all
 ```
 
-### Save the process list and enable auto-start:
+### Start using ecosystem config:
+
+```bash
+pm2 start ecosystem.config.js
+```
+
+### Save and enable auto-start:
 
 ```bash
 pm2 save
 pm2 startup
+# Follow the instructions from the startup command
+```
 
-# Done! You can now close the terminal or reboot the server and the process stays running.
+### Useful PM2 commands:
+
+```bash
+pm2 status          # Check status
+pm2 logs x-bot       # View logs
+pm2 restart x-bot    # Restart bot
+pm2 stop x-bot       # Stop bot
+pm2 delete x-bot     # Delete bot
 ```
