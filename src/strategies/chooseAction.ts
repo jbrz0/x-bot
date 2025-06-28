@@ -77,34 +77,9 @@ function getCurrentCadenceWindow(currentHour: number): typeof config.cadence.mor
  * @returns A promise resolving to the count of interactions.
  */
 async function countRecentInteractions(type: string | string[], sinceDate: Date): Promise<number> {
-  if (config.simulateMode) {
-    const types = Array.isArray(type) ? type.join(', ') : type;
-    logger.warn(`[SIMULATE] DB count skipped for type(s) ${types} since ${sinceDate.toISOString()}. Returning 0.`);
-    return 0; // Assume no interactions in simulate mode
-  }
-  try {
-    const whereClause: Prisma.InteractionLogWhereInput = {
-      createdAt: {
-        gte: sinceDate,
-      },
-    };
-
-    if (Array.isArray(type)) {
-      whereClause.type = { in: type };
-    } else {
-      whereClause.type = type;
-    }
-
-    const count = await prisma.interactionLog.count({ where: whereClause });
-
-    const types = Array.isArray(type) ? type.join(', ') : type;
-    logger.debug({ types, since: sinceDate.toISOString(), count }, 'Checked recent interaction count');
-    return count;
-  } catch (error) {
-    const types = Array.isArray(type) ? type.join(', ') : type;
-    logger.error({ error, types, sinceDate }, 'Error counting recent interactions');
-    return Infinity; // Return Infinity on error to prevent actions if DB fails
-  }
+  const types = Array.isArray(type) ? type.join(', ') : type;
+  logger.warn(`[NO-DB] Skipping database count for type(s) ${types}. Returning 0 to allow posting.`);
+  return 0; // Always return 0 to allow posting since we're not using database
 }
 
 /**
@@ -113,38 +88,8 @@ async function countRecentInteractions(type: string | string[], sinceDate: Date)
  * @returns A promise resolving to true if a recent repost exists, false otherwise.
  */
 async function hasRepostedTweetRecently(targetTweetId: string): Promise<boolean> {
-  // Define how far back to check (e.g., 7 days to be safe)
-  const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  logger.debug(`Checking for recent repost of tweet ${targetTweetId} since ${cutoffDate.toISOString()}`);
-
-  if (config.simulateMode) {
-    logger.warn(`[SIMULATE] DB check skipped for hasRepostedTweetRecently.`);
-    return false; // Assume no recent repost in simulate mode
-  }
-
-  try {
-    const recentRepost = await prisma.interactionLog.findFirst({
-      where: {
-        targetId: targetTweetId,
-        type: 'repost',
-        createdAt: {
-          gte: cutoffDate,
-        },
-      },
-    });
-
-    if (recentRepost) {
-      logger.info(`Found recent repost of tweet ${targetTweetId} (Log ID: ${recentRepost.id}). Skipping repost.`);
-      return true;
-    } else {
-      logger.debug(`No recent repost found for tweet ${targetTweetId}.`);
-      return false;
-    }
-  } catch (error) {
-    logger.error({ error, targetTweetId }, 'Error checking for recent reposts in database');
-    // Default to true (don't repost) if there's a DB error to be safe
-    return true;
-  }
+  logger.warn(`[NO-DB] Skipping repost check for tweet ${targetTweetId}. Allowing repost.`);
+  return false; // Always allow reposts since we're not using database
 }
 
 // --- Core Logic Functions ---
@@ -175,50 +120,21 @@ export function calculateEngagementScore(tweet: TweetCandidate): number {
 
 /**
  * Checks if the bot has replied to the author recently.
- * Placeholder - Needs actual implementation using Prisma.
  * @param authorId The ID of the tweet author.
  * @returns A promise resolving to true if a recent reply exists, false otherwise.
  */
 async function hasRepliedToAuthorRecently(authorId: string): Promise<boolean> {
-  const cutoffDate = new Date(Date.now() - HOURS_SINCE_LAST_REPLY_AUTHOR * 60 * 60 * 1000);
-  logger.debug(`Checking for recent replies to author ${authorId} since ${cutoffDate.toISOString()}`);
-
-  if (config.simulateMode) {
-    logger.warn(`[SIMULATE] DB check skipped for hasRepliedToAuthorRecently.`);
-    return false; // Assume no recent reply in simulate mode for safety
-  }
-
-  try {
-    const recentReply = await prisma.interactionLog.findFirst({
-      where: {
-        authorId: authorId,
-        type: 'reply', // Only check for replies
-        createdAt: {
-          gte: cutoffDate, // Greater than or equal to the cutoff date
-        },
-      },
-    });
-
-    if (recentReply) {
-      logger.info(`Found recent reply to author ${authorId} (ID: ${recentReply.id}). Skipping reply.`);
-      return true;
-    } else {
-      logger.debug(`No recent reply found for author ${authorId}.`);
-      return false;
-    }
-  } catch (error) {
-    logger.error({ error, authorId }, 'Error checking for recent replies in database');
-    // Default to true (don't reply) if there's a DB error to be safe
-    return true; 
-  }
+  logger.warn(`[NO-DB] Skipping reply check for author ${authorId}. Allowing reply.`);
+  return false; // Always allow replies since we're not using database
 }
 
 /**
  * Analyzes tweet candidates and decides on the next action (reply, repost, original post, ignore).
  * Placeholder - Needs refinement with actual logic and integration.
+ * @param bypassCadence - If true, ignores cadence windows and allows posting anytime
  * @returns A promise resolving to an ActionDecision.
  */
-export async function chooseNextAction(): Promise<ActionDecision> {
+export async function chooseNextAction(bypassCadence: boolean = false): Promise<ActionDecision> {
   logger.info('Choosing next action...');
 
   // --- Pre-Action Rate Limit Checks ---
@@ -250,13 +166,20 @@ export async function chooseNextAction(): Promise<ActionDecision> {
   let allowedReplies = 0;
   let allowedReposts = 0;
   let allowedOriginals = 0;
-  if (currentWindow) {
+  
+  if (bypassCadence) {
+    // Bypass cadence windows - allow all actions
+    allowedReplies = 10;
+    allowedReposts = 10;
+    allowedOriginals = 10;
+    logger.info('Bypassing cadence windows - all actions allowed.');
+  } else if (currentWindow) {
     allowedReplies = 'replies' in currentWindow ? currentWindow.replies : 0;
     allowedReposts = 'reposts' in currentWindow ? currentWindow.reposts : 0;
     allowedOriginals = 'original' in currentWindow ? currentWindow.original : 0;
   }
 
-  if (!currentWindow || (allowedReplies === 0 && allowedReposts === 0 && allowedOriginals === 0)) {
+  if (!bypassCadence && (!currentWindow || (allowedReplies === 0 && allowedReposts === 0 && allowedOriginals === 0))) {
     logger.info('No actions allowed in the current cadence window. Skipping candidate search to save API credits.');
     return {
       type: 'ignore',
@@ -268,7 +191,15 @@ export async function chooseNextAction(): Promise<ActionDecision> {
   // Determine start time for cadence checks (e.g., start of the current window or last X hours)
   // Simple approach: check since the start of the current window
   let cadenceCheckStartDate = new Date(now);
-  cadenceCheckStartDate.setHours(currentWindow.startHour, 0, 0, 0);
+  if (bypassCadence) {
+    // For bypass mode, check from 24 hours ago
+    cadenceCheckStartDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  } else if (currentWindow) {
+    cadenceCheckStartDate.setHours(currentWindow.startHour, 0, 0, 0);
+  } else {
+    // Fallback to current hour if no window
+    cadenceCheckStartDate.setHours(currentHour, 0, 0, 0);
+  }
 
   logger.debug({ currentHour, window: currentWindow, checkSince: cadenceCheckStartDate.toISOString() }, 'Cadence check parameters');
 

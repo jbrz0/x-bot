@@ -14,35 +14,21 @@ import { config } from './config';
 
 // const prisma = new PrismaClient();
 
-// Function to log interactions to the database
+// Function to log interactions (no database - just console logging)
 async function logInteraction(type: string, targetId?: string, authorId?: string): Promise<void> {
-  if (config.simulateMode) {
-    logger.warn(`[SIMULATE] Would log interaction: type=${type}, targetId=${targetId}, authorId=${authorId}`);
-    return;
-  }
-  try {
-    await prisma.interactionLog.create({
-      data: {
-        type,
-        targetId,
-        authorId,
-      },
-    });
-    logger.debug({ type, targetId, authorId }, 'Interaction logged to database');
-  } catch (error) {
-    logger.error({ error, type, targetId, authorId }, 'Failed to log interaction to database');
-    // Continue execution even if logging fails
-  }
+  logger.info(`[NO-DB] Interaction logged: type=${type}, targetId=${targetId}, authorId=${authorId}`);
+  // No database logging - just console output for tracking
 }
 
 /**
  * Main function to run the bot's logic cycle.
+ * @param bypassCadence - If true, ignores cadence windows for immediate posting
  */
-export async function runBotCycle() {
+export async function runBotCycle(bypassCadence: boolean = false) {
   logger.info('Starting bot cycle...');
 
   try {
-    const decision = await chooseNextAction();
+    const decision = await chooseNextAction(bypassCadence);
     logger.info(`Action decided: ${decision.type} - ${decision.reason}`);
 
     switch (decision.type) {
@@ -90,9 +76,20 @@ export async function runBotCycle() {
         break;
 
       case 'original_post':
-        // 1. Generate original post content
-        const originalPostPrompt = 'Write a short, insightful tweet about productivity or UI/UX design in the bot\'s persona.';
-        const postContent = await generateContent(originalPostPrompt);
+        // 1. Generate original post content using system prompt from config
+        // Just give a simple, varied prompt and let the system prompt handle personality
+        const prompts = [
+          'Write a casual social media post.',
+          'Share a quick thought or tip.',
+          'Post something interesting you learned recently.',
+          'Share a brief observation or insight.',
+          'Write about something you\'re working on.',
+          'Post a helpful tip or trick.',
+          'Share a random thought.',
+          'Write about your current project or interest.'
+        ];
+        const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+        const postContent = await generateContent(randomPrompt);
 
         if (!postContent) {
           logger.error('Original post content generation failed or was flagged by safeguards.');
@@ -126,28 +123,19 @@ export async function runBotCycle() {
 }
 
 // --- Entry Point --- 
-// This logic is removed as the scheduler (scheduler.ts) now calls runBotCycle().
-// Simulate mode is handled via config.simulateMode checked within functions.
-// Prisma connection management can be handled at the application level if needed.
-/*
-// Check for simulate mode flag (simple check for now)
-const isSimulate = process.argv.includes('--simulate') || process.env.SIMULATE_MODE === 'true';
-
-if (isSimulate) {
-  logger.warn('Running in SIMULATE mode. No actual API calls will be made.');
-  process.env.SIMULATE_MODE = 'true'; // Ensure it's set for downstream checks
+// Run the bot when this file is executed directly
+if (require.main === module) {
+  logger.info('Running bot cycle directly...');
+  
+  runBotCycle(true) // Bypass cadence windows for immediate posting
+    .then(async () => {
+      logger.info('Bot execution completed successfully.');
+      await prisma.$disconnect();
+      process.exit(0);
+    })
+    .catch(async (error) => {
+      logger.fatal({ error }, 'Unhandled error during bot execution.');
+      await prisma.$disconnect();
+      process.exit(1);
+    });
 }
-
-// Run the main logic
-runBotCycle()
-  .then(async () => { // Make handler async
-    logger.info('Bot execution completed successfully.');
-    await prisma.$disconnect(); // Disconnect Prisma client
-    process.exit(0);
-  })
-  .catch(async (error) => { // Make handler async
-    logger.fatal({ error }, 'Unhandled error during bot execution.');
-    await prisma.$disconnect(); // Disconnect Prisma client
-    process.exit(1);
-  });
-*/ 

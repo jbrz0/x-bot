@@ -76,7 +76,24 @@ export async function generateContent(userPrompt: string): Promise<string | null
       // Throw an error to trigger retry if content is missing
       throw new Error('OpenAI response did not contain content.'); 
     }
-    return content.trim(); // Return trimmed content on success
+    
+    // Debug logging to see exactly what we got
+    logger.debug({ 
+      rawContent: JSON.stringify(content),
+      contentLength: content.length,
+      hasProblematicChars: /[\u0000-\u001F\u007F-\u009F\uFFFD\uFEFF]/.test(content)
+    }, 'OpenAI raw response analysis');
+    
+    const trimmedContent = content.trim();
+    
+    // Remove surrounding quotes if present
+    const cleanContent = trimmedContent.startsWith('"') && trimmedContent.endsWith('"') 
+      ? trimmedContent.slice(1, -1) 
+      : trimmedContent;
+    
+    logger.debug({ cleanContent: JSON.stringify(cleanContent) }, 'Cleaned OpenAI content');
+    
+    return cleanContent;
   };
 
   try {

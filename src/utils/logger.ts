@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 
 dotenv.config(); // Load environment variables from .env file
 
-const logLevel = process.env.LOG_LEVEL || 'info';
+const logLevel = process.env.LOG_LEVEL || 'debug';
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Configure transport based on environment

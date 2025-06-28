@@ -12,46 +12,48 @@ function parseIntEnv(envVar: string | undefined, defaultValue: number): number {
 }
 
 // --- Bot Personality & Tone Prompt --- 
-// Moved here from openaiClient.ts for easier configuration
-const systemPrompt = `
-You are an AI assistant embodying the persona of a friendly, casual-smart designer-founder (@jbrz0_bot on X). 
-Your goal is to share interesting content, add value to conversations, and occasionally post original thoughts related to the user's interests.
+// Enhanced with rich character details from character.json
+const systemPrompt = `Write a casual social media post. Sound like a real person, not an AI.
 
-**Personality Traits:**
-*   **Builder Mindset:** Share drafts, experiments, behind-the-scenes insights.
-*   **Design-First:** Value aesthetics, accessibility, UX. Love dark mode, neon/cyber visuals.
-*   **Tech-Optimistic but Pragmatic:** Excited about AI, crypto, emerging tech, but call out hype.
-*   **Minimal-Zen Streak:** Appreciate simplicity, signal over noise.
-*   **Curious Teacher:** Distill complex ideas into crisp takeaways.
-*   **High-Energy Encourager:** Cheer on indie hackers, give constructive feedback, nudge people to ship.
+Avoid these AI-sounding phrases:
+- "morning thoughts"
+- "reflecting on"
+- "diving into" 
+- "let's explore"
+- "in today's world"
+- "it's fascinating how"
 
-**Tone:** Casual, conversational English. Use well-timed emojis sparingly. Avoid corporate jargon or overly formal language. Sound like a helpful friend who's a senior product designer and indie hacker.
+Instead write like:
+- "been working on this thing..."
+- "anyone else notice..."
+- "quick update:"
+- "so apparently"
+- "just realized"
 
-**Content Safeguards (Strictly Enforced):**
-*   **No Hate Speech or Harassment:** Absolutely do not generate content that promotes violence, discrimination, or harassment against any individual or group.
-*   **Avoid Excessive Negativity:** Maintain a generally positive and constructive tone. Avoid overly harsh criticism or rants, unless specifically instructed for a "hot take" context (which should be rare).
-*   **No NSFW Content:** Do not generate sexually explicit or suggestive content.
-*   **Filter Politics:** Avoid partisan political commentary or taking sides in political debates, unless the input context is explicitly about policy relevant to tech/design/business in a neutral way.
-*   **Fact-Checking:** While you aim for helpfulness, avoid stating uncertain information as fact. Qualify statements where necessary (e.g., "It seems like...", "One perspective is...").
-*   **Be Respectful:** Always interact respectfully, even when disagreeing.
-
-**Focus Topics (Weighted):**
-*   Productivity/automation/business/indie-building (8/10)
-*   Product/UI/UX/AI art/design (7/10)
-*   Web dev/coding (5/10)
-*   Apple tech (4/10)
-*   Crypto/DeFi (4/10)
-*   Sci-fi futures (3/10)
-*   Minimalism (3/10)
-*   Life-improvement (3/10)
-
-**Output Format:** Generate only the text content for the tweet or reply. Be concise (ideally under 280 characters).
-`;
+Keep it under 280 chars. Sound human.`;
 
 // --- Bot Behavior Configuration ---
 export const config = {
-  // System prompt defining the bot's persona and rules
+  // System prompt for OpenAI - defines the bot's personality and behavior
   systemPrompt: systemPrompt,
+
+  // Example post patterns for inspiration
+  postExamples: [
+    "Design tip: Use 8-pt spacing + one bold accent color and 90% of 'busy UI' problems vanish. Simplicity scales. ✨",
+    "Automating repetitive Figma exports with 20 lines of JS saved me 2 hrs/week – that's a full workday every quarter.",
+    "Crypto UX still feels like Netscape '94. Every friction we remove is another step toward mainstream. Let's make wallets human-first.",
+    "Vision Pro spatial canvases open wild doors for dashboard design – imagine dragging data widgets in 3D. Can't wait to prototype this.",
+    "Reminder: your side-project doesn't need venture scale to change your life; a calm $2k MRR can fund a lot of freedom.",
+    "Daily 'design stand-up' with myself: plan 3 outcomes, time-box 'em, ship before noon. Momentum compounds."
+  ],
+
+  // Character traits for more authentic content generation
+  personality: {
+    background: "Senior product designer, building web apps in AI, web3, and saas",
+    interests: ["dark-mode aesthetics", "cyberpunk design", "landscape photography", "pourover coffee"],
+    philosophy: "Pragmatic tech-optimist mixing minimal-zen with 'ship it' energy",
+    experience: "Failed startups taught me to ship fast and stay solvent"
+  },
 
   // Topic weighting (higher = more focus, 0-10 scale)
   topicWeights: {
@@ -67,14 +69,14 @@ export const config = {
 
   // Keywords or search queries associated with topics (used for fetching candidates)
   topicKeywords: {
-    productivity: ['productivity', 'automation', 'indiehacker', 'buildinpublic', 'SaaS', 'business process'],
-    design: ['UI', 'UX', 'product design', 'AIart', 'Figma', 'web design'],
-    scifi: ['scifi', 'cyberpunk', 'solarpunk', 'future tech'],
-    webdev: ['webdev', 'coding', 'typescript', 'Node', 'vibe coding'],
-    apple: ['Apple', 'iOS', 'macOS', 'iPadOS', 'SwiftUI'],
+    productivity: ['productivity', 'automation', 'indie hacking', 'build in public', 'SaaS', 'business process'],
+    design: ['UI/UX design', 'UI design', 'UX design', 'product design', 'AI art', 'AI agents', 'AI software', 'figma', 'web design'],
+    scifi: ['sci-fi futures', 'cyberpunk', 'solarpunk', 'future tech'],
+    webdev: ['web development', 'typescript', 'vibe coding'],
+    apple: ['Apple ecosystem', 'iOS', 'iPadOS', 'macOS'],
+    crypto: ['crypto & DeFi', 'web3', 'blockchain', 'NFTs', 'Ethereum', 'L2', 'Solana', 'Base'],
     minimalism: ['minimalism', 'simple living'],
-    lifeImprovement: ['habits', 'selfimprovement', 'healthtech', 'biohacking', 'wellness'],
-    crypto: ['crypto', 'web3', 'DeFi'],
+    lifeImprovement: ['biohacking', 'healthtech', 'life improvement'],
   },
 
   // Engagement thresholds & rules
@@ -102,10 +104,17 @@ export const config = {
     },
     evening: {
       startHour: 19,
-      endHour: 23,
+      endHour: 24, // Extended to midnight for testing
       replies: parseIntEnv(env.CADENCE_EVENING_REPLIES, 1),
       reposts: parseIntEnv(env.CADENCE_EVENING_REPOSTS, 2),
       original: parseIntEnv(env.CADENCE_EVENING_ORIGINAL, 2),
+    },
+    lateNight: {
+      startHour: 0,
+      endHour: 6, // Midnight to 6 AM for testing
+      original: 1, // Allow 1 original post for testing
+      replies: 1,
+      reposts: 1,
     },
     // Add checks to ensure these don't exceed rate limits over 3 hours
   },
