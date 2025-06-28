@@ -221,3 +221,29 @@ ecosystem.config.js # PM2 configuration
 *   Add more comprehensive tests (covering `bot.ts`, mocks for specific API scenarios).
 *   Achieve higher test coverage.
 *   (See full list in `checklist.md` Phase 2 & Advanced Features) 
+
+
+# PM2
+Use pm2 (Recommended for production)
+
+### Install pm2 (if not done yet):
+
+```bash 
+npm install -g pm2
+```
+
+
+### Start your app with pm2:
+
+```bash
+pm2 start src/scheduler.ts --interpreter ts-node --name x-bot
+```
+
+### Save the process list and enable auto-start:
+
+```bash
+pm2 save
+pm2 startup
+
+# Done! You can now close the terminal or reboot the server and the process stays running.
+```
