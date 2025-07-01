@@ -1,10 +1,6 @@
 import logger from '../utils/logger';
 import { config } from '../config'; // Import shared configuration
-import prisma from '../lib/prisma'; // Import the Prisma client instance
 import { searchRecentTweets } from '../services/xClient'; // Import the actual search function
-import { Prisma } from '@prisma/client'; // Import Prisma for types
-// TODO: Import necessary types from twitter-api-v2 when implementing tweet fetching
-// import { TTweetv2Tweet } from 'twitter-api-v2';
 
 // --- Configuration (Now imported from config.ts) ---
 const { topicWeights, engagement } = config;
@@ -31,10 +27,10 @@ interface TweetCandidate {
 }
 
 interface ActionDecision {
-  type: 'reply' | 'repost' | 'original_post' | 'ignore';
+  type: 'reply' | 'repost' | 'quote_tweet' | 'original_post' | 'ignore';
   reason: string;
-  targetTweet?: TweetCandidate; // For replies/reposts
-  content?: string; // For original posts (or pre-generated content)
+  targetTweet?: TweetCandidate; // For replies/reposts/quote tweets
+  content?: string; // For original posts or quote tweet commentary
 }
 
 // --- Helper Functions ---
@@ -261,18 +257,43 @@ export async function chooseNextAction(bypassCadence: boolean = false): Promise<
        logger.info(`Skipping repost check due to cadence limits (allowed: ${allowedReposts}, recent: ${recentRepostCountCadence}), 15m rate limit (recent: ${recentRepostsCount15m}/${TWITTER_REPOST_LIMIT_15M}), or being outside a repost window.`);
   }
 
-  // 3. Decide to make an original post (if cadence allows)
+  // 3. Decide between quote tweet and original post (if cadence allows)
+  // Both count as original content for cadence purposes
+  const recentQuoteTweetCount = await countRecentInteractions('quote_tweet', cadenceCheckStartDate);
   const recentOriginalCount = await countRecentInteractions('original_post', cadenceCheckStartDate);
-   logger.debug({ allowed: allowedOriginals, recent: recentOriginalCount }, 'Original post cadence check');
+  const totalRecentOriginalContent = recentQuoteTweetCount + recentOriginalCount;
+  
+  logger.debug({ 
+    allowedOriginals, 
+    recentQuote: recentQuoteTweetCount, 
+    recentOriginal: recentOriginalCount,
+    totalRecent: totalRecentOriginalContent 
+  }, 'Original content cadence check');
 
-  if (allowedOriginals > 0 && recentOriginalCount < allowedOriginals) {
-     logger.info('Conditions met to generate an original post based on cadence.');
-     return {
+  if (allowedOriginals > 0 && totalRecentOriginalContent < allowedOriginals) {
+    const relevantCandidates = candidates.filter(t => isTweetRelevant(t.text));
+    const hasQuoteCandidates = relevantCandidates.length > 0;
+    
+    // Use probability to decide between quote tweet and original post
+    const shouldQuoteTweet = hasQuoteCandidates && Math.random() < config.quoteTweetProbability;
+    
+    if (shouldQuoteTweet) {
+      const bestQuoteCandidate = relevantCandidates[0]; // Already sorted by engagement score
+      logger.info(`Chose quote tweet over original post. Target: Tweet ${bestQuoteCandidate.id} (Score: ${calculateEngagementScore(bestQuoteCandidate).toFixed(2)})`);
+      return {
+        type: 'quote_tweet',
+        reason: `Randomly selected quote tweet over original post (${totalRecentOriginalContent}/${allowedOriginals}).`,
+        targetTweet: bestQuoteCandidate,
+      };
+    } else {
+      logger.info(`Chose original post${hasQuoteCandidates ? ' over quote tweet' : ' (no quote candidates available)'}.`);
+      return {
         type: 'original_post',
-        reason: `Cadence allows original post (${recentOriginalCount}/${allowedOriginals}).`,
-     };
+        reason: `${hasQuoteCandidates ? 'Randomly selected original post over quote tweet' : 'Original post selected, no quote candidates'} (${totalRecentOriginalContent}/${allowedOriginals}).`,
+      };
+    }
   } else {
-      logger.info(`Skipping original post check due to cadence limits (allowed: ${allowedOriginals}, recent: ${recentOriginalCount}) or being outside an original post window.`);
+    logger.info(`Skipping original content creation due to cadence limits (allowed: ${allowedOriginals}, recent: ${totalRecentOriginalContent}) or being outside an original post window.`);
   }
 
   // 4. Default to ignoring

@@ -5,14 +5,8 @@ dotenv.config();
 import logger from './utils/logger';
 import { chooseNextAction } from './strategies/chooseAction';
 import { generateContent } from './services/openaiClient';
-// Import specific functions from xClient
-import { postTweet, replyToTweet, retweet } from './services/xClient'; 
-import prisma from './lib/prisma'; // Import the Prisma client instance
+import { postTweet, replyToTweet, retweet, quoteTweet } from './services/xClient'; 
 import { config } from './config';
-// TODO: Import Prisma client and log interactions
-// import { PrismaClient } from '@prisma/client';
-
-// const prisma = new PrismaClient();
 
 // Function to log interactions (no database - just console logging)
 async function logInteraction(type: string, targetId?: string, authorId?: string): Promise<void> {
@@ -49,7 +43,7 @@ export async function runBotCycle(bypassCadence: boolean = false) {
         // 2. Post the reply via xClient
         const replyResultId = await replyToTweet(replyContent, decision.targetTweet.id);
         
-        // 3. Log reply interaction to Prisma
+        // 3. Log reply interaction
         if (replyResultId) {
              // Log with the ID of the *reply* tweet itself
             await logInteraction('reply', replyResultId, decision.targetTweet.authorId);
@@ -66,12 +60,38 @@ export async function runBotCycle(bypassCadence: boolean = false) {
         // 1. Retweet using xClient
         const retweetSuccess = await retweet(decision.targetTweet.id);
         
-        // 2. Log repost interaction to Prisma
+        // 2. Log repost interaction
         if (retweetSuccess) {
              // Log with the ID of the *original* tweet that was retweeted
             await logInteraction('repost', decision.targetTweet.id);
         } else {
             logger.warn('Retweet was not successful, skipping interaction log.');
+        }
+        break;
+
+      case 'quote_tweet':
+        if (!decision.targetTweet) {
+          logger.error('Decision was \'quote_tweet\' but targetTweet was missing.');
+          break;
+        }
+        
+        // 1. Generate quote tweet commentary using OpenAI
+        const quoteTweetPrompt = `Write a thoughtful quote tweet comment for this tweet by @${decision.targetTweet.authorId}:\n\n"${decision.targetTweet.text}"\n\nAdd your perspective, insight, or build on their point. Keep it concise and valuable.`;
+        const quoteContent = await generateContent(quoteTweetPrompt);
+
+        if (!quoteContent) {
+          logger.error('Quote tweet content generation failed or was flagged by safeguards.');
+          break; // Skip to next cycle
+        }
+
+        // 2. Post the quote tweet via xClient
+        const quoteResultId = await quoteTweet(quoteContent, decision.targetTweet.id);
+        
+        // 3. Log quote_tweet interaction
+        if (quoteResultId) {
+            await logInteraction('quote_tweet', quoteResultId, decision.targetTweet.authorId);
+        } else {
+            logger.warn('Quote tweet was not successful, skipping interaction log.');
         }
         break;
 
@@ -87,7 +107,6 @@ export async function runBotCycle(bypassCadence: boolean = false) {
           'Post about a crypto/web3 UX observation or insight.',
           'Share a minimalist approach to design or productivity.',
           'Post about Apple ecosystem tools or workflows.',
-          'Share behind-the-scenes from working on Mixgarden.',
           'Post a quick insight about design systems or component libraries.',
           'Share something about the indie hacker or startup journey.',
           'Post about balancing tech optimism with practical reality.'
@@ -104,7 +123,7 @@ export async function runBotCycle(bypassCadence: boolean = false) {
         // 2. Post the tweet via xClient
         const postResultId = await postTweet(postContent);
         
-        // 3. Log original_post interaction to Prisma
+        // 3. Log original_post interaction
         if (postResultId) {
             await logInteraction('original_post', postResultId);
         } else {
@@ -135,12 +154,10 @@ if (require.main === module) {
   runBotCycle(true) // Bypass cadence windows for immediate posting
     .then(async () => {
       logger.info('Bot execution completed successfully.');
-      await prisma.$disconnect();
       process.exit(0);
     })
     .catch(async (error) => {
       logger.fatal({ error }, 'Unhandled error during bot execution.');
-      await prisma.$disconnect();
       process.exit(1);
     });
 }

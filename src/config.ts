@@ -124,6 +124,9 @@ export const config = {
     // Add checks to ensure these don't exceed rate limits over 3 hours
   },
 
+  // Quote tweet probability (0.0 to 1.0) - chance to quote tweet vs original post
+  quoteTweetProbability: 0.5, // 50% chance to quote tweet when both are possible
+
   // Simulation mode (can be overridden by command-line arg or Vercel env var)
   simulateMode: env.SIMULATE_MODE === 'true',
 

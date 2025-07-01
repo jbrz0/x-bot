@@ -259,6 +259,36 @@ export async function retweet(tweetId: string): Promise<boolean> {
 }
 
 /**
+ * Quote tweets a specific tweet with commentary using official X API.
+ * @param text The commentary text to add to the quote tweet.
+ * @param tweetId The ID of the tweet to quote.
+ * @returns The ID of the created quote tweet, or null if failed.
+ */
+export async function quoteTweet(text: string, tweetId: string): Promise<string | null> {
+  const actionName = 'quote tweet';
+  logger.info(`Attempting to ${actionName} ${tweetId}: "${text.substring(0, 50)}..."`);
+
+  if (config.simulateMode) {
+    logger.warn(`[SIMULATE] ${actionName} ${tweetId} skipped: "${text}"`);
+    return 'simulated_quote_tweet_id';
+  }
+
+  const sanitizedText = sanitizeContent(text);
+  
+  const result = await handleApiRequest(
+    () => xClient.tweet(sanitizedText, { quote_tweet_id: tweetId }),
+    actionName
+  );
+
+  if (result && result.data.id) {
+    logger.info(`Quote tweet posted successfully with ID: ${result.data.id}`);
+    return result.data.id;
+  }
+  logger.warn({ result: result?.data }, `Quote tweet for ${tweetId} did not return expected ID.`);
+  return null;
+}
+
+/**
  * Searches for recent tweets using TwitterAPI.io based on configured keywords.
  * @param count The maximum number of tweets to return.
  * @returns An array of TweetCandidate objects.
