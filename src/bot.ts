@@ -77,18 +77,23 @@ export async function runBotCycle(bypassCadence: boolean = false) {
 
       case 'original_post':
         // 1. Generate original post content using system prompt from config
-        // Just give a simple, varied prompt and let the system prompt handle personality
+        // Specific prompts that align with jbrz0_bot personality and expertise
         const prompts = [
-          'Write a casual social media post.',
-          'Share a quick thought or tip.',
-          'Post something interesting you learned recently.',
-          'Share a brief observation or insight.',
-          'Write about something you\'re working on.',
-          'Post a helpful tip or trick.',
-          'Share a random thought.',
-          'Write about your current project or interest.'
+          'Share a UI/UX design tip or insight from your experience.',
+          'Post about a productivity hack or workflow optimization you use.',
+          'Share something you learned while building with TypeScript or React.',
+          'Post about your experience bootstrapping or building in public.',
+          'Share a thought about AI tools and their impact on design/development.',
+          'Post about a crypto/web3 UX observation or insight.',
+          'Share a minimalist approach to design or productivity.',
+          'Post about Apple ecosystem tools or workflows.',
+          'Share behind-the-scenes from working on Mixgarden.',
+          'Post a quick insight about design systems or component libraries.',
+          'Share something about the indie hacker or startup journey.',
+          'Post about balancing tech optimism with practical reality.'
         ];
         const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+        logger.debug({ selectedPrompt: randomPrompt }, 'Selected prompt for original post');
         const postContent = await generateContent(randomPrompt);
 
         if (!postContent) {
