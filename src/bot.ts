@@ -32,7 +32,7 @@ export async function runBotCycle(bypassCadence: boolean = false) {
           break;
         }
         // 1. Generate reply content using OpenAI
-        const replyPrompt = `Draft a smart, value-adding reply to this tweet by @${decision.targetTweet.authorId} (followers: ${decision.targetTweet.authorFollowers}):\n\n"${decision.targetTweet.text}"\n\nKeep it concise and in the bot's persona.`;
+        const replyPrompt = `Reply to @${decision.targetTweet.authorId}:\n\n"${decision.targetTweet.text}"\n\nAdd value. Be brief and helpful.`;
         const replyContent = await generateContent(replyPrompt);
 
         if (!replyContent) {
@@ -76,7 +76,7 @@ export async function runBotCycle(bypassCadence: boolean = false) {
         }
         
         // 1. Generate quote tweet commentary using OpenAI
-        const quoteTweetPrompt = `Write a thoughtful quote tweet comment for this tweet by @${decision.targetTweet.authorId}:\n\n"${decision.targetTweet.text}"\n\nAdd your perspective, insight, or build on their point. Keep it concise and valuable.`;
+        const quoteTweetPrompt = `Quick comment on this tweet by @${decision.targetTweet.authorId}:\n\n"${decision.targetTweet.text}"\n\nAdd your take. Be brief and insightful.`;
         const quoteContent = await generateContent(quoteTweetPrompt);
 
         if (!quoteContent) {
@@ -97,19 +97,19 @@ export async function runBotCycle(bypassCadence: boolean = false) {
 
       case 'original_post':
         // 1. Generate original post content using system prompt from config
-        // Specific prompts that align with jbrz0_bot personality and expertise
+        // Short, punchy prompts for concise content
         const prompts = [
-          'Share a UI/UX design tip or insight from your experience.',
-          'Post about a productivity hack or workflow optimization you use.',
-          'Share something you learned while building with TypeScript or React.',
-          'Post about your experience bootstrapping or building in public.',
-          'Share a thought about AI tools and their impact on design/development.',
-          'Post about a crypto/web3 UX observation or insight.',
-          'Share a minimalist approach to design or productivity.',
-          'Post about Apple ecosystem tools or workflows.',
-          'Post a quick insight about design systems or component libraries.',
-          'Share something about the indie hacker or startup journey.',
-          'Post about balancing tech optimism with practical reality.'
+          'Quick UI/UX tip from your design experience.',
+          'Productivity hack you actually use.',
+          'TypeScript/React learning from building.',
+          'Bootstrapping insight from Mixgarden.',
+          'AI tool impact on your workflow.',
+          'Crypto UX observation.',
+          'Minimalist design approach.',
+          'Apple ecosystem workflow tip.',
+          'Design systems insight.',
+          'Indie hacker reality check.',
+          'Tech optimism vs hype reality.'
         ];
         const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
         logger.debug({ selectedPrompt: randomPrompt }, 'Selected prompt for original post');

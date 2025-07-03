@@ -302,40 +302,48 @@ export async function searchRecentTweets(count: number = 10): Promise<TweetCandi
     return [];
   }
 
-  // Build search query from configured keywords
-  const allKeywords = Object.values(config.topicKeywords).flat();
-  const uniqueKeywords = [...new Set(allKeywords)];
-  const query = uniqueKeywords.join(' OR ');
+  // Build simpler search query with core keywords
+  const coreKeywords = [
+    'design', 'UI', 'UX', 'productivity', 'TypeScript', 'React', 
+    'indie hacking', 'startup', 'AI tools', 'crypto UX'
+  ];
+  const query = coreKeywords.slice(0, 5).join(' OR '); // Use only first 5 to keep query simple
   
   logger.debug(`Using TwitterAPI.io search query: ${query}`);
 
-  // Make API call to TwitterAPI.io for searching
-  const result = await handleApiRequest(
-    () => makeTwitterApiRequest(`/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&count=${Math.min(count, 100)}`),
-    actionName
-  );
+  try {
+    // Make API call to TwitterAPI.io for searching
+    const result = await makeTwitterApiRequest(
+      `/twitter/tweet/advanced_search?query=${encodeURIComponent(query)}&count=${Math.min(count, 20)}`
+    );
+    
+    if (!result || !result.tweets) {
+      logger.warn('TwitterAPI.io search returned no tweets or invalid response structure.');
+      logger.debug('TwitterAPI.io response:', result);
+      return [];
+    }
 
-  if (!result || !result.tweets) {
-    logger.warn('TwitterAPI.io search returned no tweets or encountered an error.');
+    const candidates: TweetCandidate[] = result.tweets.map((tweet: TwitterApiTweet) => {
+      return {
+        id: tweet.id,
+        text: tweet.text,
+        authorId: tweet.author.id,
+        authorFollowers: tweet.author.followers,
+        likeCount: tweet.likeCount,
+        retweetCount: tweet.retweetCount,
+        replyCount: tweet.replyCount,
+        quoteCount: tweet.quoteCount,
+        createdAt: new Date(tweet.createdAt),
+      };
+    });
+
+    logger.info(`Found ${candidates.length} potential tweet candidates from TwitterAPI.io search.`);
+    return candidates;
+    
+  } catch (error: any) {
+    logger.error({ error: error.message, stack: error.stack }, 'TwitterAPI.io search failed');
     return [];
   }
-
-  const candidates: TweetCandidate[] = result.tweets.map((tweet: TwitterApiTweet) => {
-    return {
-      id: tweet.id,
-      text: tweet.text,
-      authorId: tweet.author.id,
-      authorFollowers: tweet.author.followers,
-      likeCount: tweet.likeCount,
-      retweetCount: tweet.retweetCount,
-      replyCount: tweet.replyCount,
-      quoteCount: tweet.quoteCount,
-      createdAt: new Date(tweet.createdAt),
-    };
-  });
-
-  logger.info(`Found ${candidates.length} potential tweet candidates from TwitterAPI.io search.`);
-  return candidates;
 }
 
 // Keep the default export for potential direct client usage if needed elsewhere,
