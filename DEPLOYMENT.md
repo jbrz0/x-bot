@@ -1,107 +1,75 @@
-# DigitalOcean Deployment Guide
+# Deployment Guide (Docker)
+
+This guide explains how to deploy the bot using Docker and Docker Compose on a server. While the instructions are generic, they have been tested on a DigitalOcean Droplet running Ubuntu.
 
 ## Prerequisites
-- DigitalOcean account
-- Docker installed on your droplet
-- TwitterAPI.io API key
-- OpenAI API key
 
-## Quick Deployment Steps
+*   A server or virtual private server (VPS) with Docker and Docker Compose installed.
+*   Git installed on the server.
+*   Your bot's repository accessible from the server.
 
-### 1. Create DigitalOcean Droplet
-```bash
-# Create a new droplet with Docker pre-installed
-# Recommended: Ubuntu 22.04 with Docker, 1GB RAM minimum
-```
+## Deployment Steps
 
-### 2. Clone and Setup
-```bash
-# SSH into your droplet
-ssh root@your-droplet-ip
+1.  **Connect to Your Server:**
+    *   SSH into your server where you plan to run the bot.
+    ```bash
+    ssh your_user@your_server_ip
+    ```
 
-# Clone the repository
-git clone https://github.com/yourusername/x-bot.git
-cd x-bot
+2.  **Clone the Repository:**
+    *   Clone your bot's repository onto the server.
+    ```bash
+    git clone <your-repository-url>
+    cd x-bot
+    ```
 
-# Copy environment file
-cp .env.example .env
-```
+3.  **Create the Environment File:**
+    *   Copy the example environment file to create your production configuration.
+    ```bash
+    cp .env.example .env
+    ```
+    *   **Edit the `.env` file** using a terminal editor like `nano` or `vim` and fill in all your production credentials.
+    ```bash
+    nano .env
+    ```
+    *   **Crucial Settings:**
+        *   Set `NODE_ENV=production`.
+        *   Set `SIMULATE_MODE=false` to enable live posting.
+        *   Fill in your `X_...` API keys and `OPENAI_API_KEY`.
 
-### 3. Configure Environment Variables
-Edit `.env` file with your credentials:
-```bash
-nano .env
-```
+4.  **Build and Run with Docker Compose:**
+    *   Use Docker Compose to build the image and run the container in the background.
+    ```bash
+    docker-compose up --build -d
+    ```
+    *   `--build`: Forces Docker to rebuild the image using the latest code in your `Dockerfile`.
+    *   `-d`: Runs the container in detached mode (it runs in the background).
 
-Required variables:
-- `TWITTERAPI_IO_KEY` - Your TwitterAPI.io API key
-- `TWITTERAPI_IO_USER_ID` - Your Twitter user ID
-- `OPENAI_API_KEY` - Your OpenAI API key
-- `SIMULATE_MODE` - Set to "false" for production
+## Managing the Bot
 
-### 4. Build and Run with Docker
-```bash
-# Build the Docker image
-docker build -t x-bot .
+*   **Check Logs:**
+    *   To see the bot's live output and monitor its activity:
+    ```bash
+    docker-compose logs -f x-bot-app
+    ```
+    *   Press `Ctrl+C` to stop viewing the logs.
 
-# Run the container
-docker run -d \
-  --name x-bot \
-  --env-file .env \
-  --restart unless-stopped \
-  x-bot
+*   **Stopping the Bot:**
+    *   To stop and remove the running container:
+    ```bash
+    docker-compose down
+    ```
 
-# Check logs
-docker logs x-bot -f
-```
+## Updating the Bot
 
-### 5. Alternative: Using Docker Compose
-```bash
-# Start with docker-compose
-docker-compose up -d
+To update your bot with the latest code from your repository, follow these steps:
 
-# View logs
-docker-compose logs -f
-```
-
-## Important Notes
-
-⚠️ **TwitterAPI.io Limitations**: This API is read-only. The bot can search and analyze tweets but cannot post, reply, or retweet.
-
-🔄 **For Full Functionality**: If you need posting capabilities, you'll need to:
-1. Get official Twitter API access
-2. Update the `xClient.ts` to use the official API
-3. Add the official API credentials to your environment
-
-## Monitoring and Maintenance
-
-```bash
-# Check bot status
-docker ps
-
-# View recent logs
-docker logs x-bot --tail 50
-
-# Restart bot
-docker restart x-bot
-
-# Update bot
-git pull
-docker build -t x-bot .
-docker stop x-bot
-docker rm x-bot
-docker run -d --name x-bot --env-file .env --restart unless-stopped x-bot
-```
-
-## Troubleshooting
-
-### Common Issues:
-1. **API Key Errors**: Verify your TwitterAPI.io and OpenAI keys are correct
-2. **Database Issues**: Check if SQLite file has proper permissions
-3. **Memory Issues**: Upgrade to a larger droplet if needed
-
-### Debug Mode:
-```bash
-# Run in debug mode
-docker run --rm --env-file .env -e LOG_LEVEL=debug x-bot
-```
+1.  **SSH into the server** and navigate to the `x-bot` directory.
+2.  **Pull the latest code** from your repository:
+    ```bash
+    git pull origin main
+    ```
+3.  **Rebuild and restart the container** with the updated code:
+    ```bash
+    docker-compose up --build -d
+    ```
