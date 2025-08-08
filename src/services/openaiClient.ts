@@ -68,7 +68,7 @@ export async function generateContent(userPrompt: string): Promise<string | null
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7, // Adjust for desired creativity/predictability
-      max_tokens: 280, // Max length roughly suitable for X
+      max_completion_tokens: 280, // Max length roughly suitable for X
     });
 
     const content = completion.choices[0]?.message?.content;
