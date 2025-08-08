@@ -67,7 +67,6 @@ export async function generateContent(userPrompt: string): Promise<string | null
         { role: "system", content: config.systemPrompt }, // Use prompt from config
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.7, // Adjust for desired creativity/predictability
       max_completion_tokens: 280, // Max length roughly suitable for X
     });
 
