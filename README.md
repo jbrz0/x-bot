@@ -14,7 +14,7 @@ Designed for local execution and deployment on any server with Node.js.
     *   **Note:** The combined length of all keywords in `src/config.ts` (joined by ` OR ` and including necessary filters like `-is:retweet`) must not exceed the X API v2 search query limit of 512 characters. If you add too many keywords, the tweet search functionality will fail.
 *   **Engagement Scoring:** Evaluates potential tweets using a heuristic based on author followers, likes, retweets, and age.
 *   **Action Strategy:** Decides whether to reply, repost, post original content, or ignore based on engagement, relevance, and basic cadence rules.
-*   **AI-Powered Content:** Uses OpenAI (`gpt-4o-mini` by default) to generate replies and original posts matching a defined persona (designer-founder, casual-smart, tech-optimistic).
+*   **AI-Powered Content:** Uses OpenAI (`gpt-5-mini` by default) to generate replies and original posts matching a defined persona (designer-founder, casual-smart, tech-optimistic).
 *   **Rate Limit Handling:** Implements basic retries with exponential backoff for common API errors.
 
 *   **Scheduling:** 
@@ -99,7 +99,7 @@ Before running the bot, you may want to customize its behavior. Here are the key
 | `X_ACCESS_TOKEN`       | X Access Token (for the bot user @jbrz0_bot)                                | `your_access_token`             |
 | `X_ACCESS_SECRET`      | X Access Token Secret (for the bot user @jbrz0_bot)                         | `your_access_secret`            |
 | `OPENAI_API_KEY`       | Your OpenAI API key                                                         | `sk-xxxxxxxxxxxxxxxxxxxxxxxxx`    |
-| `OPENAI_MODEL`         | OpenAI model to use (optional, defaults to `gpt-4o-mini`)                   | `gpt-4o`                        |
+| `OPENAI_MODEL`         | OpenAI model to use (optional, defaults to `gpt-5-mini`)                   | `gpt-4o`                        |
 
 | `LOG_LEVEL`            | Logging level for Pino (optional, defaults to `info`)                       | `info`                          |
 | `SIMULATE_MODE`        | Set to `false` for production                                               | `false`                         |

@@ -22,7 +22,7 @@ const openai = new OpenAI({
 });
 
 // Simple model router - allows easily switching models via env var
-const defaultModel = 'gpt-4o-mini';
+const defaultModel = 'gpt-5-mini';
 const selectedModel = OPENAI_MODEL || defaultModel;
 
 logger.info(`OpenAI client initialized. Using model: ${selectedModel}`);
