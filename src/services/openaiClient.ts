@@ -36,10 +36,13 @@ function containsHarmfulContent(text: string | null | undefined): boolean {
 }
 
 // --- Helpers ---
-function extractOutputText(resp: any): { text: string; refusal?: string } {
+function extractOutputText(resp: any): { text: string; refusal?: string; status?: string; incompleteReason?: string } {
+  const status = resp?.status as string | undefined;
+  const incompleteReason = resp?.incomplete_details?.reason as string | undefined;
+
   // Preferred convenience field
   if (typeof resp?.output_text === 'string' && resp.output_text.trim()) {
-    return { text: resp.output_text.trim() };
+    return { text: resp.output_text.trim(), status, incompleteReason };
   }
 
   // Walk output array
@@ -53,14 +56,13 @@ function extractOutputText(resp: any): { text: string; refusal?: string } {
       if (typeof p?.text === 'string' && p.text.trim()) {
         text += (text ? '\n' : '') + p.text.trim();
       }
-      // Some responses surface a refusal/safety block
       if ((p?.type === 'refusal' || p?.type === 'safety') && typeof p?.refusal === 'string') {
         refusalMsg = p.refusal.trim();
       }
     }
   }
 
-  return { text: text.trim(), refusal: refusalMsg || undefined };
+  return { text: text.trim(), refusal: refusalMsg || undefined, status, incompleteReason };
 }
 
 function stripSurroundingQuotes(s: string): string {
@@ -71,6 +73,29 @@ function stripSurroundingQuotes(s: string): string {
 function compact(obj: any, max = 1800): string {
   const s = JSON.stringify(obj);
   return s.length > max ? s.slice(0, max) + ' …(truncated)…' : s;
+}
+
+// --- Internal: call Responses API with controls, optionally bump tokens ---
+async function callResponsesOnce({
+  userPrompt,
+  maxOutputTokens,
+}: {
+  userPrompt: string;
+  maxOutputTokens: number;
+}) {
+  const resp = await openai.responses.create({
+    model: selectedModel,
+    input: [
+      { role: 'system', content: config.systemPrompt },
+      { role: 'user', content: userPrompt },
+    ],
+    // Encourage less “thinking” and shorter text
+    reasoning: { effort: 'low' } as any,
+    text: { verbosity: 'low', format: { type: 'text' } } as any,
+    max_output_tokens: maxOutputTokens,
+  });
+
+  return resp;
 }
 
 /**
@@ -91,17 +116,18 @@ export async function generateContent(userPrompt: string): Promise<string | null
 
   const run = async () => {
     // 1) Try Responses API first (primary for GPT-5)
-    const resp = await openai.responses.create({
-      model: selectedModel,
-      input: [
-        { role: 'system', content: config.systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      // NOTE: do not pass response_format here; not accepted by current SDK types
-      max_output_tokens: 280,
-    });
+    let resp = await callResponsesOnce({ userPrompt, maxOutputTokens: 320 });
+    let { text, refusal, status, incompleteReason } = extractOutputText(resp);
 
-    const { text, refusal } = extractOutputText(resp);
+    // If we ran out of tokens before any text, bump once and try again inline
+    if ((!text || text.length === 0) && status === 'incomplete' && incompleteReason === 'max_output_tokens') {
+      logger.info(
+        { respSnapshot: compact(resp) },
+        'Responses API incomplete due to token budget; retrying with larger budget'
+      );
+      resp = await callResponsesOnce({ userPrompt, maxOutputTokens: 640 });
+      ({ text, refusal, status, incompleteReason } = extractOutputText(resp));
+    }
 
     if (refusal && !text) {
       logger.warn({ refusal }, 'Model returned refusal without text.');
@@ -133,8 +159,8 @@ export async function generateContent(userPrompt: string): Promise<string | null
         { role: 'user', content: userPrompt },
       ],
       // GPT-5-compatible param name on chat endpoint
-      max_completion_tokens: 280,
-      tool_choice: 'none', // prevent tool paths in fallback
+      max_completion_tokens: 200, // slightly smaller; this is just a fallback
+      // NOTE: do NOT pass tool_choice without tools; it causes a 400
     });
 
     const cc = completion?.choices?.[0];
