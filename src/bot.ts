@@ -98,11 +98,12 @@ export async function runBotCycle(bypassCadence: boolean = false) {
       case 'original_post':
         // 1. Generate original post content using system prompt from config
         // Short, punchy prompts for concise content
+
+        // removed prompts:
+        // 'TypeScript/React learning from building.',
         const prompts = [
           'Quick UI/UX tip from your design experience.',
           'Productivity hack you actually use.',
-          'TypeScript/React learning from building.',
-          'Bootstrapping insight from Mixgarden.',
           'AI tool impact on your workflow.',
           'Crypto UX observation.',
           'Minimalist design approach.',

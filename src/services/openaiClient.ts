@@ -119,6 +119,12 @@ export async function generateContent(userPrompt: string): Promise<string | null
       return stripSurroundingQuotes(text);
     }
 
+    // No direct text — log a snapshot at INFO so it shows even if debug is off
+    logger.info(
+      { respSnapshot: compact(resp) },
+      'Responses API returned no direct text; snapshot attached'
+    );
+
     // 2) Fallback: Chat Completions (some environments produce simpler text here)
     const completion = await openai.chat.completions.create({
       model: selectedModel,
@@ -128,6 +134,7 @@ export async function generateContent(userPrompt: string): Promise<string | null
       ],
       // GPT-5-compatible param name on chat endpoint
       max_completion_tokens: 280,
+      tool_choice: 'none', // prevent tool paths in fallback
     });
 
     const cc = completion?.choices?.[0];
@@ -146,7 +153,10 @@ export async function generateContent(userPrompt: string): Promise<string | null
     }
 
     // 3) Truly no content — log compact snapshot and throw to trigger retry
-    logger.debug({ rawResponses: compact({ resp, completion }) }, 'No direct text found in responses');
+    logger.info(
+      { respSnapshot: compact({ resp, completion }) },
+      'Neither Responses nor Chat returned text; snapshot attached'
+    );
     throw new Error('OpenAI response did not contain content.');
   };
 
