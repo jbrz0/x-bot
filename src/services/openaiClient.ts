@@ -8,23 +8,20 @@ dotenv.config();
 
 const { OPENAI_API_KEY, OPENAI_MODEL } = process.env;
 
-// Check credentials
+// --- Credentials ---
 if (!OPENAI_API_KEY) {
   const errorMsg = 'Missing OPENAI_API_KEY in environment variables.';
   logger.error(errorMsg);
-  if (process.env.NODE_ENV !== 'test') {
-    process.exit(1);
-  }
+  if (process.env.NODE_ENV !== 'test') process.exit(1);
 }
 
 const openai = new OpenAI({
   apiKey: OPENAI_API_KEY || (process.env.NODE_ENV === 'test' ? 'test_openai_key' : ''),
 });
 
-// Simple model router - allows easily switching models via env var
+// --- Model routing ---
 const defaultModel = 'gpt-5-mini';
 const selectedModel = OPENAI_MODEL || defaultModel;
-
 logger.info(`OpenAI client initialized. Using model: ${selectedModel}`);
 
 // --- Basic Harmful Content Check (Post-Generation) ---
@@ -32,27 +29,48 @@ const harmfulPatterns = [
   /\b(kill|murder|rape|nazi|hate speech)\b/i,
 ];
 
-function containsHarmfulContent(text: string): boolean {
+function containsHarmfulContent(text: string | null | undefined): boolean {
+  if (!text) return false;
   const lowerText = text.toLowerCase();
-  return harmfulPatterns.some(pattern => pattern.test(lowerText));
+  return harmfulPatterns.some((pattern) => pattern.test(lowerText));
 }
 
 // --- Helpers ---
-function extractOutputText(resp: any): string {
-  // Preferred: SDK convenience field on Responses API
-  if (resp?.output_text && typeof resp.output_text === 'string') return resp.output_text;
+function extractOutputText(resp: any): { text: string; refusal?: string } {
+  // Preferred convenience field
+  if (typeof resp?.output_text === 'string' && resp.output_text.trim()) {
+    return { text: resp.output_text.trim() };
+  }
 
-  // Fallback: walk the raw output array
-  const output = resp?.output ?? resp?.response ?? [];
-  for (const item of output) {
+  // Walk output array
+  const out = resp?.output ?? resp?.response ?? [];
+  let text = '';
+  let refusalMsg = '';
+
+  for (const item of out) {
     const parts = item?.content ?? [];
-    for (const part of parts) {
-      // Common shapes: { type: "output_text", text } or { type: "text", text }
-      if (typeof part?.text === 'string') return part.text;
-      if (typeof part?.value === 'string') return part.value; // just in case
+    for (const p of parts) {
+      if (typeof p?.text === 'string' && p.text.trim()) {
+        text += (text ? '\n' : '') + p.text.trim();
+      }
+      // Some responses surface a refusal/safety block
+      if ((p?.type === 'refusal' || p?.type === 'safety') && typeof p?.refusal === 'string') {
+        refusalMsg = p.refusal.trim();
+      }
     }
   }
-  return '';
+
+  return { text: text.trim(), refusal: refusalMsg || undefined };
+}
+
+function stripSurroundingQuotes(s: string): string {
+  const t = s.trim();
+  return t.startsWith('"') && t.endsWith('"') ? t.slice(1, -1) : t;
+}
+
+function compact(obj: any, max = 1800): string {
+  const s = JSON.stringify(obj);
+  return s.length > max ? s.slice(0, max) + ' …(truncated)…' : s;
 }
 
 /**
@@ -66,53 +84,70 @@ export async function generateContent(userPrompt: string): Promise<string | null
 
   if (config.simulateMode) {
     logger.warn(`[SIMULATE] ${actionName} skipped. Returning placeholder.`);
-    return "[Simulated OpenAI Content]";
+    return '[Simulated OpenAI Content]';
   }
 
   const pRetry = (await import('p-retry')).default;
 
   const run = async () => {
+    // 1) Try Responses API first (primary for GPT-5)
     const resp = await openai.responses.create({
       model: selectedModel,
       input: [
         { role: 'system', content: config.systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      // Force plain text to avoid tool/refusal structures where possible
-      // response_format: { type: 'text' } as any,
-      // Token cap suited for X; Responses API uses max_output_tokens
+      // NOTE: do not pass response_format here; not accepted by current SDK types
       max_output_tokens: 280,
     });
 
-    let content = extractOutputText(resp);
+    const { text, refusal } = extractOutputText(resp);
 
-    if (!content || typeof content !== 'string') {
-      // Log the raw (stringified) response once to help debug shapes in the wild
-      logger.debug({ rawResponse: JSON.stringify(resp) }, 'OpenAI raw response (no direct text found)');
-      throw new Error('OpenAI response did not contain content.');
+    if (refusal && !text) {
+      logger.warn({ refusal }, 'Model returned refusal without text.');
     }
 
-    // Raw analysis log
-    logger.debug(
-      {
-        rawContent: JSON.stringify(content),
-        contentLength: content.length,
-        hasProblematicChars: /[\u0000-\u001F\u007F-\u009F\uFFFD\uFEFF]/.test(content),
-      },
-      'OpenAI raw response analysis'
-    );
+    if (text) {
+      logger.debug(
+        {
+          rawContent: JSON.stringify(text),
+          contentLength: text.length,
+          hasProblematicChars: /[\u0000-\u001F\u007F-\u009F\uFFFD\uFEFF]/.test(text),
+        },
+        'OpenAI raw response analysis (Responses API)'
+      );
+      return stripSurroundingQuotes(text);
+    }
 
-    const trimmedContent = content.trim();
+    // 2) Fallback: Chat Completions (some environments produce simpler text here)
+    const completion = await openai.chat.completions.create({
+      model: selectedModel,
+      messages: [
+        { role: 'system', content: config.systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      // GPT-5-compatible param name on chat endpoint
+      max_completion_tokens: 280,
+    });
 
-    // Remove surrounding quotes if present
-    const cleanContent =
-      trimmedContent.startsWith('"') && trimmedContent.endsWith('"')
-        ? trimmedContent.slice(1, -1)
-        : trimmedContent;
+    const cc = completion?.choices?.[0];
+    const content = cc?.message?.content?.trim();
 
-    logger.debug({ cleanContent: JSON.stringify(cleanContent) }, 'Cleaned OpenAI content');
+    if (content) {
+      logger.debug(
+        {
+          rawContent: JSON.stringify(content),
+          contentLength: content.length,
+          hasProblematicChars: /[\u0000-\u001F\u007F-\u009F\uFFFD\uFEFF]/.test(content),
+        },
+        'OpenAI raw response analysis (Chat Completions fallback)'
+      );
+      return stripSurroundingQuotes(content);
+    }
 
-    return cleanContent;
+    // 3) Truly no content — log compact snapshot and throw to trigger retry
+    logger.debug({ rawResponses: compact({ resp, completion }) }, 'No direct text found in responses');
+    throw new Error('OpenAI response did not contain content.');
   };
 
   try {
